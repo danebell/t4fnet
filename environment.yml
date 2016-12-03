@@ -1,0 +1,65 @@
+name: t4f
+channels:
+- menpo
+dependencies:
+- python
+# - dlib
+# - ipykernel
+# - ipython
+# - ipython_genutils
+# - ipywidgets
+# - jinja2
+# - jsonschema
+- jupyter
+- jupyter_client
+- jupyter_console
+- jupyter_core
+# - libpng
+# - markupsafe
+- matplotlib
+- menpo
+- menpodetect
+- menpowidgets
+# - mistune
+# - nbconvert
+# - nbformat
+- notebook
+# - numpy
+# - openssl
+- pandas
+# - path.py
+# - pexpect
+# - pickleshare
+# - pip
+# - ptyprocess
+# - pydot-ng
+# - pygments
+# - pyparsing
+# - pyqt
+# - python-dateutil
+# - pytz
+# - pyyaml
+# - pyzmq
+# - qt
+# - qtconsole
+# - readline
+# - requests
+# - scipy
+# - scikit-learn
+# - scikit-image
+# - seaborn
+# - setuptools
+# - simplegeneric
+# - sip
+# - six
+# - sqlite
+# - terminado
+# - tk
+# - tornado
+# - traitlets
+# - wheel
+# - xz
+# - zlib
+- pip:
+  - keras
+#   - theano
