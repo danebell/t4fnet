@@ -2,3 +2,4 @@ img/*
 cropped/*
 .DS_Store
 *.dat
+gold.tsv
