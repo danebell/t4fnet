@@ -4,6 +4,7 @@ channels:
 dependencies:
 - python
 # - dlib
+- h5py
 # - ipykernel
 # - ipython
 # - ipython_genutils
