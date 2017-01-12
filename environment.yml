@@ -54,6 +54,7 @@ dependencies:
 # - sip
 # - six
 # - sqlite
+- tensorflow
 # - terminado
 # - tk
 # - tornado
