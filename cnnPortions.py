@@ -400,10 +400,10 @@ for start in range(0, 95, 5):
     predmn = np.mean(pred, axis=1)
     predmn = (predmn >= 0.5).astype(int)
     
-    # weight by recency (most recent tweets first)
-    wts = np.linspace(1., 0.01, train_shp[1])
-    predwm = np.average(pred, axis=1, weights=wts)
-    predwm = (predwm >= 0.5).astype(int)
+    # # weight by recency (most recent tweets first)
+    # wts = np.linspace(1., 0.01, train_shp[1])
+    # predwm = np.average(pred, axis=1, weights=wts)
+    # predwm = (predwm >= 0.5).astype(int)
 
     y = y_test.flatten()
     
