@@ -43,7 +43,7 @@ def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
             mt = width
         else:
             mt = len(s)
-        x[idx, :min(mt+sstart,len(s)-sstart)] = sequence.pad_sequences(s[sstart:(mt+sstart)], ml, dtype, padding, truncating, value)
+        x[idx, :min(mt,len(s)-sstart)] = sequence.pad_sequences(s[sstart:(mt+sstart)], ml, dtype, padding, truncating, value)
     return x
 
 def find_most_tweets(x):
