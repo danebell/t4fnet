@@ -2,7 +2,7 @@ import gzip
 import numpy as np
 np.random.seed(947) # for reproducibility
 import pickle as pkl
-​
+
 from keras.preprocessing import sequence
 from keras.utils import np_utils
 from keras.models import Sequential, load_model
@@ -19,12 +19,17 @@ def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
     '''
     nb_samples = len(sequences)
     
+    if maxtweets is not None:
+        width = int(float(max([len(s) for s in sequences])) * maxtweets)
+    else:
+        width = max([len(s) for s in sequences])
+
     if maxlen is not None:
         ml = maxlen
     else:
         ml = find_longest(sequences)
         
-    x = (np.zeros((nb_samples, mt, ml)) * value).astype(dtype)
+    x = (np.zeros((nb_samples, width, ml)) * value).astype(dtype)
     for idx, s in enumerate(sequences):
         sstart = int(len(s) * start)
         if sstart == 0:
@@ -35,7 +40,7 @@ def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
             mt = len(s)
         x[idx, :min(mt+sstart,len(s)-sstart)] = sequence.pad_sequences(s[sstart:(mt+sstart)], ml, dtype, padding, truncating, value)
     return x
-​
+
 def find_most_tweets(x):
     currmax = 0
     for account in x:
@@ -43,7 +48,7 @@ def find_most_tweets(x):
         if currlen > currmax:
             currmax = currlen
     return currmax
-​
+
 def find_longest(x):
     currmax = 0
     for account in x:
@@ -52,25 +57,25 @@ def find_longest(x):
             if currlen > currmax:
                 currmax = currlen
     return currmax
-​
+
 def cap_words(x, nb_words, oov=2):
     '''
     Substitute Out-Of-Vocabulary index for words outside the max size
     '''
     return [[[oov if w >= nb_words else w for w in z] for z in y] for y in x]
-​
+
 def skip_n(x, n, oov=2):
     '''
     Substitute Out-Of-Vocabulary index for the n most common words
     '''
     return [[[oov if w < n else w for w in z] for z in y] for y in x]
-​
+
 def cap_length(x, maxlen):
     '''
     Ignore words after maxlen tokens
     '''
     return [[z[:maxlen] for z in y] for y in x]
-​
+
 def push_indices(x, start, index_from):
     '''
     Increase all indices by index_from and insert start index
@@ -81,7 +86,7 @@ def push_indices(x, start, index_from):
         return [[[w + index_from for w in z] for z in y] for y in x]
     else:
         return x
-​
+
 def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113,
               start=1, oov=2, index_from=3):
@@ -100,7 +105,7 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
         oov: words that were cut out because of the `nb_words`
             or `skip_top` limit will be replaced with this character.
         index_from: index actual words with this index and higher.
-​
+
     Note that the 'out of vocabulary' character is only used for
     words that were present in the training set but are not included
     because they're not making the `nb_words` cut here.
@@ -114,18 +119,18 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
         f = gzip.open(path, 'rb')
     else:
         f = open(path, 'rb')
-​
+
     (train_X, train_y) = pkl.load(f)
     (test_X, test_y) = pkl.load(f)
-​
+
     f.close()
-​
+
     # randomize datum order
     np.random.seed(seed)
     np.random.shuffle(train_X)
     np.random.seed(seed)
     np.random.shuffle(train_y)
-​
+
     np.random.seed(seed * 2)
     np.random.shuffle(test_X)
     np.random.seed(seed * 2)
@@ -135,37 +140,37 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     if maxlen is not None:
         train_X = cap_length(train_X, maxlen)
         test_X = cap_length(test_X, maxlen)
-​
+
     # cut off infrequent words to vocab of size nb_words
     if nb_words is not None:
         train_X = cap_words(train_X, nb_words, oov)
         test_X = cap_words(test_X, nb_words, oov)
-​
+
     # cut off most frequent skip_top words
     if skip_top > 0:
         train_X = skip_n(train_X, skip_top, oov)
         test_X = skip_n(test_X, skip_top, oov)
-​
+
     # prepend each sequence with start and raise indices by index_from
     train_X = push_indices(train_X, start, index_from)
     test_X = push_indices(test_X, start, index_from)
     
     train_X = np.array(train_X)
     train_y = np.array(train_y)
-​
+
     test_X = np.array(test_X)
     test_y = np.array(test_y)
     
     return (train_X, train_y), (test_X, test_y)
-​
-​
+
+
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
                     vocab='ow3d.dict.pkl', 
                     w2v='/data/nlp/corpora/twitter4food/food_vectors_clean.txt'):
     '''
     Load pre-made embeddings from word2vec or similar. See preprocessText3D
     '''
-​
+
     f = open(vocab, 'rb')
     word_index = pkl.load(f)
     f.close()
@@ -174,7 +179,7 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
         max_features = min(nb_words, len(word_index))
     else:
         max_features = len(word_index)
-​
+
     embeddings_index = {}
     f = open(w2v, 'rb')
     fl = f.readline().strip().decode('UTF-8')
@@ -192,7 +197,7 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
             print("")
             
         i = i + 1
-​
+
     f.close()
     print("")
     print('Found %s word vectors.' % len(embeddings_index))
@@ -204,9 +209,9 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
             if embedding_vector is not None:
                 # words not found in embedding index will be all-zeros.
                 embedding_matrix[i+index_from] = embedding_vector
-​
+
     return embedding_matrix
-​
+
 def shuffle_in_unison(a, b):
     '''
     Given two numpy arrays, shuffle them so their indices match.
@@ -219,15 +224,15 @@ def shuffle_in_unison(a, b):
         shuffled_a[new_index] = a[old_index]
         shuffled_b[new_index] = b[old_index]
     return shuffled_a, shuffled_b
-​
-​
+
+
 def bootstrap(gold, pred, reps=100000):
     '''
     # Arguments
         gold: list of gold (ground-truth) integer labels
         pred: list of predicted integer labels
         reps: how many repetitions to do (more=more accurate)
-​
+
     Run a bootstrap significance test. Returns prediction 
     accuracy (out of 1), the accuracy of the baseline of 
     choosing the most common label in the gold labels, and 
@@ -281,7 +286,7 @@ def bootstrap(gold, pred, reps=100000):
                 fp = fp +1
             else:
                 tn = tn +1
-​
+
         tps.append(tp)
         tns.append(tn)
         fns.append(fn)
@@ -298,7 +303,7 @@ def bootstrap(gold, pred, reps=100000):
             f1s.append(0)
         else:
             f1s.append(2 * prec * rec / (prec + rec))
-​
+
     f1s = np.array(f1s)
     tps = np.array(tps)
     tns = np.array(tns)
@@ -310,12 +315,12 @@ def bootstrap(gold, pred, reps=100000):
     macrof1 = f1s.sum() / len(f1s)
     
     return [baseline, acc, prec, rec, microf1, macrof1, p]
-​
+
 
 max_features = 20000
 maxtweets = 3200
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
-​
+
 (X_traink, y_train), (X_testk, y_test) = load_data(nb_words=max_features, maxlen=maxlen)
 print(len(X_traink), 'train sequences')
 print(len(X_testk), 'test sequences')
@@ -338,10 +343,10 @@ for start in range(0, 95, 5):
     X_train_flat = X_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
     y_train_flat = y_train.repeat(train_shp[1])
     X_train_shuff, y_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat)
-    ​
+    
     X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
     y_test_flat = y_test.repeat(test_shp[1])
-    ​
+    
     # We shuffle the flattened reps. for better training
     # (but keep the original order for our by-account classification)
     X_test_shuff, y_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat)
@@ -388,16 +393,16 @@ for start in range(0, 95, 5):
     # account classification with each tweet's classification getting an equal vote
     predmn = np.mean(pred, axis=1)
     predmn = (predmn >= 0.5).astype(int)
-    ​
+    
     # weight by recency (most recent tweets first)
     wts = np.linspace(1., 0.01, maxtweets)
     predwm = np.average(pred, axis=1, weights=wts)
     predwm = (predwm >= 0.5).astype(int)
 
     y = y_test.flatten()
-    ​
+    
     print('Unweighted mean')
-    ​res.append(bootstrap(y, predmn)[1:].append(floatstart)
+    res.append(bootstrap(y, predmn)[1:].append(floatstart)
     
 
 print('acc\tprec\trec\tmicrof1\tmacrof1\tp\tstart')
