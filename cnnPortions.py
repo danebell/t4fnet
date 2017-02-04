@@ -34,9 +34,9 @@ def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
         
     x = (np.zeros((nb_samples, width, ml)) * value).astype(dtype)
     for idx, s in enumerate(sequences):
-        sstart = int(len(s) * start)
-        if sstart == 0:
+        if len(s) == 0:
             continue # no tweets
+        sstart = int(len(s) * start)
         if maxtweets is not None:
             mt = int(len(s) * maxtweets)
         elif imaxtweets is not None:
