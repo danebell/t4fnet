@@ -402,8 +402,7 @@ for start in range(0, 95, 5):
     y = y_test.flatten()
     
     print('Unweighted mean')
-    res.append(bootstrap(y, predmn)[1:].append(floatstart)
-    
+    res.append(bootstrap(y, predmn)[1:].append(floatstart))
 
 print('acc\tprec\trec\tmicrof1\tmacrof1\tp\tstart')
 for record in res:
