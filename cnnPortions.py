@@ -12,14 +12,17 @@ from keras.layers import Convolution1D, MaxPooling1D, Flatten
 from keras.layers.core import K
 
 def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
-          padding='pre', truncating='pre', value=0., start=0.0):
+          padding='pre', truncating='pre', value=0., start=0.0,
+          imaxtweets=None):
     '''
         # Returns
         x: numpy array with dimensions (number_of_sequences, maxtweets, maxlen)
     '''
     nb_samples = len(sequences)
     
-    if maxtweets is not None:
+    if imaxtweets is not None:
+        width = imaxtweets
+    elif maxtweets is not None:
         width = int(float(max([len(s) for s in sequences])) * maxtweets)
     else:
         width = max([len(s) for s in sequences])
@@ -36,6 +39,8 @@ def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
             continue # no tweets
         if maxtweets is not None:
             mt = int(len(s) * maxtweets)
+        elif imaxtweets is not None:
+            mt = width
         else:
             mt = len(s)
         x[idx, :min(mt+sstart,len(s)-sstart)] = sequence.pad_sequences(s[sstart:(mt+sstart)], ml, dtype, padding, truncating, value)
@@ -334,7 +339,8 @@ for start in range(0, 95, 5):
     floatstart = float(start) / 100.0
     maxtweets = 0.10
     X_train = pad3d(X_traink, maxtweets=maxtweets, maxlen=maxlen, start=floatstart)
-    X_test = pad3d(X_testk, maxtweets=maxtweets, maxlen=maxlen, start=floatstart)
+    width = X_train.shape[1]
+    X_test = pad3d(X_testk, maxtweets=None, maxlen=maxlen, start=floatstart, imaxtweets=width)
     train_shp = X_train.shape
     test_shp = X_test.shape
     print('X_train shape:', train_shp)
