@@ -3,6 +3,8 @@ import numpy as np
 np.random.seed(947) # for reproducibility
 import pickle as pkl
 
+testOnDev = False
+
 from keras.preprocessing import sequence
 from keras.utils import np_utils
 from keras.models import Sequential, load_model
@@ -93,8 +95,8 @@ def push_indices(x, start, index_from):
         return x
 
 def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
-              maxlen=None, seed=113,
-              start=1, oov=2, index_from=3):
+              maxlen=None, seed=113, start=1, oov=2, index_from=3,
+              testOnDev=True):
     '''
     # Arguments
         path: where the data is stored (in '.')
@@ -126,7 +128,13 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
         f = open(path, 'rb')
 
     (train_X, train_y) = pkl.load(f)
+    (dev_X, dev_y) = pkl.load(f)
     (test_X, test_y) = pkl.load(f)
+    if (testOnDev):
+        (test_X, test_y) = (dev_X, dev_y)
+    else:
+        train_X = train_X + dev_X
+        train_y = train_y + dev_y
 
     f.close()
 
@@ -326,7 +334,7 @@ max_features = 20000
 maxtweets = 3200
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
-(X_traink, y_train), (X_testk, y_test) = load_data(nb_words=max_features, maxlen=maxlen)
+(X_traink, y_train), (X_testk, y_test) = load_data(nb_words=max_features, maxlen=maxlen, testOnDev=testOnDev)
 print(len(X_traink), 'train sequences')
 print(len(X_testk), 'test sequences')
 
