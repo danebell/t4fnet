@@ -332,6 +332,8 @@ maxlen = 50  # cut texts to this number of words (among top max_features most co
 print(len(x_pos), 'positive sequences')
 print(len(x_neg), 'negative sequences')
 
+num_partitions = 10
+
 # each partition is pos_len + neg_len in length
 pos_len = int(len(y_pos) / num_partitions)
 neg_len = int(len(y_neg) / num_partitions)
@@ -345,8 +347,6 @@ for start in range(0, 95, 5):
     floatstart = float(start) / 100.0
     maxtweets = 0.10
     print(str(floatstart) + ' to ' + str(floatstart + maxtweets))
-
-    num_partitions = 10
 
     cnnv = np.zeros(len(y_pos) + len(y_neg))
     gold = np.zeros(len(y_pos) + len(y_neg))
