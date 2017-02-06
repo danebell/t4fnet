@@ -347,7 +347,7 @@ for start in range(0, 95, 5):
     floatstart = float(start) / 100.0
     maxtweets = 0.10
     print(str(floatstart) + ' to ' + str(floatstart + maxtweets))
-    X_train = pad3d(X_traink, maxtweets=maxtweets, maxlen=maxlen, start=floatstart)
+    X_train = pad3d(X_traink, maxtweets=maxtweets, maxlen=maxlen, start=floatstart, imaxtweets=320)
     width = X_train.shape[1]
     X_test = pad3d(X_testk, maxtweets=None, maxlen=maxlen, start=floatstart, imaxtweets=width)
     train_shp = X_train.shape
