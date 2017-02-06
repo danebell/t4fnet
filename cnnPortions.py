@@ -376,9 +376,9 @@ for start in range(0, 95, 5):
         X_train, y_train = shuffle_in_unison(X_train, y_train)
         X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-        X_train = pad3d(X_traink, maxtweets=maxtweets, maxlen=maxlen, start=floatstart, imaxtweets=320)
+        X_train = pad3d(X_train, maxtweets=maxtweets, maxlen=maxlen, start=floatstart, imaxtweets=320)
         width = X_train.shape[1]
-        X_test = pad3d(X_testk, maxtweets=None, maxlen=maxlen, start=floatstart, imaxtweets=width)
+        X_test = pad3d(X_test, maxtweets=None, maxlen=maxlen, start=floatstart, imaxtweets=width)
         train_shp = X_train.shape
         test_shp = X_test.shape
         print('X_train shape:', train_shp)
