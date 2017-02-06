@@ -46,7 +46,7 @@ def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
         else:
             mt = len(s)
         if imaxtweets is not None:
-            x[idx, :min(imaxtweets,len(s)-sstart)] = sequence.pad_sequences(s[sstart:(mt+sstart)], ml, dtype, padding, truncating, value)
+            x[idx, :min(imaxtweets,len(s)-sstart)] = sequence.pad_sequences(s[sstart:(imaxtweets+sstart)], ml, dtype, padding, truncating, value)
         else:
             x[idx, :min(mt,len(s)-sstart)] = sequence.pad_sequences(s[sstart:(mt+sstart)], ml, dtype, padding, truncating, value)
     return x
