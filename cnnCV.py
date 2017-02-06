@@ -350,11 +350,11 @@ for partition in range(num_partitions):
 		pos_train_ids = [ix for ix in range(pos_len * partition)] + [ix for ix in range(pos_len * (partition + 1), len(y_pos))]
 		neg_train_ids = [ix for ix in range(neg_len * partition)] + [ix for ix in range(neg_len * (partition + 1), len(y_neg))]
 
-	X_train = x_pos[pos_train_ids] + x_neg[neg_train_ids]
-	y_train = y_pos[pos_train_ids] + y_neg[neg_train_ids]
+	X_train = np.append(x_pos[pos_train_ids], x_neg[neg_train_ids])
+	y_train = np.append(y_pos[pos_train_ids], y_neg[neg_train_ids])
 	
-	X_test = x_pos[pos_test_ids] + x_neg[neg_test_ids]
-	y_test = y_pos[pos_test_ids] + y_neg[neg_test_ids]
+	X_test = np.append(x_pos[pos_test_ids], x_neg[neg_test_ids])
+	y_test = np.append(y_pos[pos_test_ids] + y_neg[neg_test_ids])
 
 	X_train, y_train = shuffle_in_unison(X_train, y_train)
 	X_test, y_test = shuffle_in_unison(X_test, y_test)
