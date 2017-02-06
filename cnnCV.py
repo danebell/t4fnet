@@ -335,7 +335,7 @@ lstm = np.zeros(len(y_pos) + len(y_neg))
 gold = np.zeros(len(y_pos) + len(y_neg))
 label_index = 0
 
-for partition in [0]:
+for partition in range(num_partitions):
 	# This convoluted way of making partitions assures equal pos and neg labels per partition
 	pos_test_ids = [ix for ix in range(pos_len * partition, pos_len * (partition + 1))]
 	neg_test_ids = [ix for ix in range(neg_len * partition, neg_len * (partition + 1))]

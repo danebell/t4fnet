@@ -3,8 +3,6 @@ import numpy as np
 np.random.seed(947) # for reproducibility
 import pickle as pkl
 
-testOnDev = False
-
 from keras.preprocessing import sequence
 from keras.utils import np_utils
 from keras.models import Sequential, load_model
@@ -98,8 +96,7 @@ def push_indices(x, start, index_from):
         return x
 
 def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
-              maxlen=None, seed=113, start=1, oov=2, index_from=3,
-              testOnDev=True):
+              maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
         path: where the data is stored (in '.')
@@ -130,54 +127,48 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     else:
         f = open(path, 'rb')
 
-    (train_X, train_y) = pkl.load(f)
-    (dev_X, dev_y) = pkl.load(f)
-    (test_X, test_y) = pkl.load(f)
-    if (testOnDev):
-        (test_X, test_y) = (dev_X, dev_y)
-    else:
-        train_X = train_X + dev_X
-        train_y = train_y + dev_y
+    (x_pos, y_pos) = pkl.load(f)
+    (x_neg, y_neg) = pkl.load(f)
 
     f.close()
 
     # randomize datum order
     np.random.seed(seed)
-    np.random.shuffle(train_X)
+    np.random.shuffle(x_pos)
     np.random.seed(seed)
-    np.random.shuffle(train_y)
+    np.random.shuffle(y_pos)
 
     np.random.seed(seed * 2)
-    np.random.shuffle(test_X)
+    np.random.shuffle(x_neg)
     np.random.seed(seed * 2)
-    np.random.shuffle(test_y)
+    np.random.shuffle(y_neg)
     
     # keep maxlen words of each tweet
     if maxlen is not None:
-        train_X = cap_length(train_X, maxlen)
-        test_X = cap_length(test_X, maxlen)
+        x_pos = cap_length(x_pos, maxlen)
+        x_neg = cap_length(x_neg, maxlen)
 
     # cut off infrequent words to vocab of size nb_words
     if nb_words is not None:
-        train_X = cap_words(train_X, nb_words, oov)
-        test_X = cap_words(test_X, nb_words, oov)
+        x_pos = cap_words(x_pos, nb_words, oov)
+        x_neg = cap_words(x_neg, nb_words, oov)
 
     # cut off most frequent skip_top words
     if skip_top > 0:
-        train_X = skip_n(train_X, skip_top, oov)
-        test_X = skip_n(test_X, skip_top, oov)
+        x_pos = skip_n(x_pos, skip_top, oov)
+        x_neg = skip_n(x_neg, skip_top, oov)
 
     # prepend each sequence with start and raise indices by index_from
-    train_X = push_indices(train_X, start, index_from)
-    test_X = push_indices(test_X, start, index_from)
+    x_pos = push_indices(x_pos, start, index_from)
+    x_neg = push_indices(x_neg, start, index_from)
     
-    train_X = np.array(train_X)
-    train_y = np.array(train_y)
+    x_pos = np.array(x_pos)
+    y_pos = np.array(y_pos)
 
-    test_X = np.array(test_X)
-    test_y = np.array(test_y)
+    x_neg = np.array(x_neg)
+    y_neg = np.array(y_neg)
     
-    return (train_X, train_y), (test_X, test_y)
+    return (x_pos, y_pos), (x_neg, y_neg)
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
@@ -337,9 +328,13 @@ max_features = 20000
 maxtweets = 3200
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
-(X_traink, y_train), (X_testk, y_test) = load_data(nb_words=max_features, maxlen=maxlen, testOnDev=testOnDev)
-print(len(X_traink), 'train sequences')
-print(len(X_testk), 'test sequences')
+(x_pos, y_pos), (x_neg, y_neg) = load_data(nb_words=max_features, maxlen=maxlen)
+print(len(x_pos), 'positive sequences')
+print(len(x_neg), 'negative sequences')
+
+# each partition is pos_len + neg_len in length
+pos_len = int(len(y_pos) / num_partitions)
+neg_len = int(len(y_neg) / num_partitions)
 
 emb_dim = 200
 embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
@@ -350,76 +345,108 @@ for start in range(0, 95, 5):
     floatstart = float(start) / 100.0
     maxtweets = 0.10
     print(str(floatstart) + ' to ' + str(floatstart + maxtweets))
-    X_train = pad3d(X_traink, maxtweets=maxtweets, maxlen=maxlen, start=floatstart, imaxtweets=320)
-    width = X_train.shape[1]
-    X_test = pad3d(X_testk, maxtweets=None, maxlen=maxlen, start=floatstart, imaxtweets=width)
-    train_shp = X_train.shape
-    test_shp = X_test.shape
-    print('X_train shape:', train_shp)
-    print('X_test shape:', test_shp)
 
-    X_train_flat = X_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
-    y_train_flat = y_train.repeat(train_shp[1])
-    X_train_shuff, y_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat)
-    
-    X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
-    y_test_flat = y_test.repeat(test_shp[1])
-    
-    # We shuffle the flattened reps. for better training
-    # (but keep the original order for our by-account classification)
-    X_test_shuff, y_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat)
+    num_partitions = 10
 
-    nb_filter = 64 # how many convolutional filters
-    filter_length = 5 # how many tokens a convolution covers
-    pool_length = 4 # how many cells of convolution to pool across when maxing
-    nb_epoch = 1 # how many training epochs
-    batch_size = 256 # how many tweets to train at a time
+    cnnv = np.zeros(len(y_pos) + len(y_neg))
+    gold = np.zeros(len(y_pos) + len(y_neg))
+    label_index = 0
 
-    print('Build first model (tweet-level)...')
-    model1 = Sequential()
-    model1.add(Embedding(max_features + 3, 
-                         emb_dim, 
-                         input_length=maxlen,
-                         weights=[embeddings]
-                        ))#, 
-                         #mask_zero=True))
-    model1.add(Convolution1D(nb_filter=nb_filter,
-                             filter_length=filter_length,
-                             border_mode='valid',
-                             activation='relu',
-                             subsample_length=1))
-    model1.add(MaxPooling1D(pool_length=pool_length))
-    model1.add(Flatten())
-    model1.add(Dense(128))
-    model1.add(Activation('relu'))
-    model1.add(Dropout(0.4))
-    model1.add(Dense(1))
-    model1.add(Activation('sigmoid'))
-    model1.compile(loss='binary_crossentropy',
-                   optimizer='adam',
-                   metrics=['accuracy'])
+    for partition in range(num_partitions):
+        # This convoluted way of making partitions assures equal pos and neg labels per partition
+        pos_test_ids = [ix for ix in range(pos_len * partition, pos_len * (partition + 1))]
+        neg_test_ids = [ix for ix in range(neg_len * partition, neg_len * (partition + 1))]
 
-    #model1.summary()
+        if partition == 0: # first partition
+            pos_train_ids = [ix for ix in range(pos_len * (partition + 1), len(y_pos))]
+            neg_train_ids = [ix for ix in range(neg_len * (partition + 1), len(y_neg))]
+        elif partition == (num_partitions - 1): # last partition
+            pos_train_ids = [ix for ix in range(pos_len * partition)]
+            neg_train_ids = [ix for ix in range(neg_len * partition)]
+        else: # all others are made up of two segments
+            pos_train_ids = [ix for ix in range(pos_len * partition)] + [ix for ix in range(pos_len * (partition + 1), len(y_pos))]
+            neg_train_ids = [ix for ix in range(neg_len * partition)] + [ix for ix in range(neg_len * (partition + 1), len(y_neg))]
 
-    print('Train...')
-    model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
-               validation_data=(X_test_shuff, y_test_shuff))
+        X_train = np.append(x_pos[pos_train_ids], x_neg[neg_train_ids])
+        y_train = np.append(y_pos[pos_train_ids], y_neg[neg_train_ids])
+        
+        X_test = np.append(x_pos[pos_test_ids], x_neg[neg_test_ids])
+        y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
 
-    pred = model1.predict(X_test_flat)
-    pred = pred.reshape((test_shp[0], test_shp[1]))
+        X_train, y_train = shuffle_in_unison(X_train, y_train)
+        X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-    # account classification with each tweet's classification getting an equal vote
-    predmn = np.mean(pred, axis=1)
-    predmn = (predmn >= 0.5).astype(int)
-    
-    # # weight by recency (most recent tweets first)
-    # wts = np.linspace(1., 0.01, train_shp[1])
-    # predwm = np.average(pred, axis=1, weights=wts)
-    # predwm = (predwm >= 0.5).astype(int)
+        X_train = pad3d(X_traink, maxtweets=maxtweets, maxlen=maxlen, start=floatstart, imaxtweets=320)
+        width = X_train.shape[1]
+        X_test = pad3d(X_testk, maxtweets=None, maxlen=maxlen, start=floatstart, imaxtweets=width)
+        train_shp = X_train.shape
+        test_shp = X_test.shape
+        print('X_train shape:', train_shp)
+        print('X_test shape:', test_shp)
 
-    y = y_test.flatten()
-    
-    bs = bootstrap(y, predmn)
+        X_train_flat = X_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
+        y_train_flat = y_train.repeat(train_shp[1])
+        X_train_shuff, y_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat)
+        
+        X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
+        y_test_flat = y_test.repeat(test_shp[1])
+        
+        # We shuffle the flattened reps. for better training
+        # (but keep the original order for our by-account classification)
+        X_test_shuff, y_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat)
+
+        nb_filter = 64 # how many convolutional filters
+        filter_length = 5 # how many tokens a convolution covers
+        pool_length = 4 # how many cells of convolution to pool across when maxing
+        nb_epoch = 1 # how many training epochs
+        batch_size = 256 # how many tweets to train at a time
+
+        print('Build first model (tweet-level)...')
+        model1 = Sequential()
+        model1.add(Embedding(max_features + 3, 
+                             emb_dim, 
+                             input_length=maxlen,
+                             weights=[embeddings]
+                            ))#, 
+                             #mask_zero=True))
+        model1.add(Convolution1D(nb_filter=nb_filter,
+                                 filter_length=filter_length,
+                                 border_mode='valid',
+                                 activation='relu',
+                                 subsample_length=1))
+        model1.add(MaxPooling1D(pool_length=pool_length))
+        model1.add(Flatten())
+        model1.add(Dense(128))
+        model1.add(Activation('relu'))
+        model1.add(Dropout(0.4))
+        model1.add(Dense(1))
+        model1.add(Activation('sigmoid'))
+        model1.compile(loss='binary_crossentropy',
+                       optimizer='adam',
+                       metrics=['accuracy'])
+
+        #model1.summary()
+
+        print('Train...')
+        model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
+                   validation_data=(X_test_shuff, y_test_shuff))
+
+        pred = model1.predict(X_test_flat)
+        pred = pred.reshape((test_shp[0], test_shp[1]))
+
+        # account classification with each tweet's classification getting an equal vote
+        predmn = np.mean(pred, axis=1)
+        predmn = (predmn >= 0.5).astype(int)
+        cnnv[range(label_index, label_index + len(predmn))] = predmn
+
+        # Because we shuffled, this is the only way to know the true y values
+        y = y_test.flatten()
+        gold[range(label_index, label_index + len(y))] = y
+
+        label_index = label_index + len(y)
+
+
+    bs = bootstrap(gold, cnnv)
     bs = bs[1:]
     bs.append(floatstart)
     res.append(bs)
