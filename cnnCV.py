@@ -82,8 +82,7 @@ def push_indices(x, start, index_from):
         return x
 
 def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
-              maxlen=None, seed=113, start=1, oov=2, index_from=3,
-              testOnDev=True):
+              maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
         path: where the data is stored (in '.')
@@ -322,7 +321,7 @@ max_features = 20000
 maxtweets = 1500
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
-(x_pos, y_pos), (x_neg, y_neg) = load_data(nb_words=max_features, maxlen=maxlen, testOnDev=testOnDev)
+(x_pos, y_pos), (x_neg, y_neg) = load_data(nb_words=max_features, maxlen=maxlen)
 print(len(x_pos), 'positive sequences')
 print(len(x_neg), 'negative sequences')
 
