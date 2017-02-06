@@ -335,7 +335,7 @@ lstm = np.zeros(len(y_pos) + len(y_neg))
 gold = np.zeros(len(y_pos) + len(y_neg))
 label_index = 0
 
-for partition in range(num_partitions):
+for partition in [0]:
 	# This convoluted way of making partitions assures equal pos and neg labels per partition
 	pos_test_ids = [ix for ix in range(pos_len * partition, pos_len * (partition + 1))]
 	neg_test_ids = [ix for ix in range(neg_len * partition, neg_len * (partition + 1))]
@@ -426,13 +426,13 @@ for partition in range(num_partitions):
 	# account classification with each tweet's classification getting an equal vote
 	predmn = np.mean(pred, axis=1)
 	predmn = (predmn >= 0.5).astype(int)
-	cnnv[(label_index, label_index + len(predmn))] = predmn
+	cnnv[range(label_index, label_index + len(predmn))] = predmn
 
 	# weight by recency (most recent tweets first)
 	wts = np.linspace(1., 0.01, maxtweets)
 	predwm = np.average(pred, axis=1, weights=wts)
 	predwm = (predwm >= 0.5).astype(int)
-	cnnw[(label_index, label_index + len(predwm))] = predwm
+	cnnw[range(label_index, label_index + len(predwm))] = predwm
 
 	# reproduce all but last layer of CNN for feeding LSTM
 	intermediate = Sequential()
@@ -499,11 +499,11 @@ for partition in range(num_partitions):
 
 	pred = model2.predict_classes(X_test_mid).flatten()
 
-	lstm[(label_index, label_index + len(pred))] = pred
+	lstm[range(label_index, label_index + len(pred))] = pred
 
 	# Because we shuffled, this is the only way to know the true y values
 	y = y_test.flatten()
-	gold[(label_index, label_index + len(y))] = y
+	gold[range(label_index, label_index + len(y))] = y
 
 	label_index = label_index + len(y)
 
