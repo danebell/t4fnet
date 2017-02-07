@@ -258,6 +258,22 @@ def bootstrap(gold, pred, reps=100000):
         stars = ''
         
     acc = np.mean(agr)
+    tp = 0
+    tn = 0
+    fn = 0
+    fp = 0
+    for i in range(len(gold)):
+        if gold[i] == 1 and pred[i] == 1:
+            tp = tp + 1
+        elif gold[i] == 1 and pred[i] != 1:
+            fn = fn + 1
+        elif gold[i] != 1 and pred[i] == 1:
+            fp = fp +1
+        else:
+            tn = tn +1
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+
     f1s = []
     tps = []
     tns = []
@@ -308,8 +324,8 @@ def bootstrap(gold, pred, reps=100000):
     macrof1 = f1s.sum() / len(f1s)
     
     print('accuracy = %.4f' % acc)
-    print('precision = %.4f' % prec)
-    print('recall = %.4f' % rec)
+    print('precision = %.4f' % precision)
+    print('recall = %.4f' % recall)
     print('microF1 = %.4f' % microf1)
     print('macroF1 = %.4f' % macrof1)
     print('baseline = %.4f' % baseline)
@@ -517,7 +533,16 @@ bootstrap(gold, cnnw)
 print('LSTM')
 bootstrap(gold, lstm)
 
-
+with open('/work/dane/cnnCVout.txt', 'w') as f:
+	f.write('gold:\n')
+	f.write(gold)
+	f.write('\ncnnv\n')
+	f.write(cnnv)
+	f.write('\ncnnw\n')
+	f.write(cnnw)
+	f.write('\nlstm\n')
+	f.write(lstm)
+	
 
 
 
