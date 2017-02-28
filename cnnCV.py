@@ -352,176 +352,176 @@ gold = np.zeros(len(y_pos) + len(y_neg))
 label_index = 0
 
 for partition in range(num_partitions):
-	# This convoluted way of making partitions assures equal pos and neg labels per partition
-	pos_test_ids = [ix for ix in range(pos_len * partition, pos_len * (partition + 1))]
-	neg_test_ids = [ix for ix in range(neg_len * partition, neg_len * (partition + 1))]
+    # This convoluted way of making partitions assures equal pos and neg labels per partition
+    pos_test_ids = [ix for ix in range(pos_len * partition, pos_len * (partition + 1))]
+    neg_test_ids = [ix for ix in range(neg_len * partition, neg_len * (partition + 1))]
 
-	if partition == 0: # first partition
-		pos_train_ids = [ix for ix in range(pos_len * (partition + 1), len(y_pos))]
-		neg_train_ids = [ix for ix in range(neg_len * (partition + 1), len(y_neg))]
-	elif partition == (num_partitions - 1): # last partition
-		pos_train_ids = [ix for ix in range(pos_len * partition)]
-		neg_train_ids = [ix for ix in range(neg_len * partition)]
-	else: # all others are made up of two segments
-		pos_train_ids = [ix for ix in range(pos_len * partition)] + [ix for ix in range(pos_len * (partition + 1), len(y_pos))]
-		neg_train_ids = [ix for ix in range(neg_len * partition)] + [ix for ix in range(neg_len * (partition + 1), len(y_neg))]
+    if partition == 0: # first partition
+        pos_train_ids = [ix for ix in range(pos_len * (partition + 1), len(y_pos))]
+        neg_train_ids = [ix for ix in range(neg_len * (partition + 1), len(y_neg))]
+    elif partition == (num_partitions - 1): # last partition
+        pos_train_ids = [ix for ix in range(pos_len * partition)]
+        neg_train_ids = [ix for ix in range(neg_len * partition)]
+    else: # all others are made up of two segments
+        pos_train_ids = [ix for ix in range(pos_len * partition)] + [ix for ix in range(pos_len * (partition + 1), len(y_pos))]
+        neg_train_ids = [ix for ix in range(neg_len * partition)] + [ix for ix in range(neg_len * (partition + 1), len(y_neg))]
 
-	X_train = np.append(x_pos[pos_train_ids], x_neg[neg_train_ids])
-	y_train = np.append(y_pos[pos_train_ids], y_neg[neg_train_ids])
-	
-	X_test = np.append(x_pos[pos_test_ids], x_neg[neg_test_ids])
-	y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
+    X_train = np.append(x_pos[pos_train_ids], x_neg[neg_train_ids])
+    y_train = np.append(y_pos[pos_train_ids], y_neg[neg_train_ids])
+    
+    X_test = np.append(x_pos[pos_test_ids], x_neg[neg_test_ids])
+    y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
 
-	X_train, y_train = shuffle_in_unison(X_train, y_train)
-	X_test, y_test = shuffle_in_unison(X_test, y_test)
+    X_train, y_train = shuffle_in_unison(X_train, y_train)
+    X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-	X_train = pad3d(X_train, maxtweets=maxtweets, maxlen=maxlen)
-	X_test = pad3d(X_test, maxtweets=maxtweets, maxlen=maxlen)
-	train_shp = X_train.shape
-	test_shp = X_test.shape
-	print('X_train shape:', train_shp)
-	print('X_test shape:', test_shp)
+    X_train = pad3d(X_train, maxtweets=maxtweets, maxlen=maxlen)
+    X_test = pad3d(X_test, maxtweets=maxtweets, maxlen=maxlen)
+    train_shp = X_train.shape
+    test_shp = X_test.shape
+    print('X_train shape:', train_shp)
+    print('X_test shape:', test_shp)
 
-	X_train_flat = X_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
-	y_train_flat = y_train.repeat(train_shp[1])
-	X_train_shuff, y_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat)
+    X_train_flat = X_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
+    y_train_flat = y_train.repeat(train_shp[1])
+    X_train_shuff, y_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat)
 
-	X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
-	y_test_flat = y_test.repeat(test_shp[1])
+    X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
+    y_test_flat = y_test.repeat(test_shp[1])
 
-	# We shuffle the flattened reps. for better training
-	# (but keep the original order for our by-account classification)
-	X_test_shuff, y_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat)
+    # We shuffle the flattened reps. for better training
+    # (but keep the original order for our by-account classification)
+    X_test_shuff, y_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat)
 
-	# just clearing up space -- from now on, we use the flattened representations
-	del X_train
-	del X_test
+    # just clearing up space -- from now on, we use the flattened representations
+    del X_train
+    del X_test
 
-	emb_dim = 200
-	embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
+    emb_dim = 200
+    embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
 
-	nb_filter = 64 # how many convolutional filters
-	filter_length = 5 # how many tokens a convolution covers
-	pool_length = 4 # how many cells of convolution to pool across when maxing
-	nb_epoch = 1 # how many training epochs
-	batch_size = 256 # how many tweets to train at a time
+    nb_filter = 64 # how many convolutional filters
+    filter_length = 5 # how many tokens a convolution covers
+    pool_length = 4 # how many cells of convolution to pool across when maxing
+    nb_epoch = 1 # how many training epochs
+    batch_size = 256 # how many tweets to train at a time
 
-	print('Build first model (tweet-level)...')
-	model1 = Sequential()
-	model1.add(Embedding(max_features + 3, 
-	                     emb_dim, 
-	                     input_length=maxlen,
-	                     weights=[embeddings]
-	                    ))#, 
-	                     #mask_zero=True))
-	model1.add(Convolution1D(nb_filter=nb_filter,
-	                         filter_length=filter_length,
-	                         border_mode='valid',
-	                         activation='relu',
-	                         subsample_length=1))
-	model1.add(MaxPooling1D(pool_length=pool_length))
-	model1.add(Flatten())
-	model1.add(Dense(128))
-	model1.add(Activation('relu'))
-	model1.add(Dropout(0.4))
-	model1.add(Dense(1))
-	model1.add(Activation('sigmoid'))
-	model1.compile(loss='binary_crossentropy',
-	               optimizer='adam',
-	               metrics=['accuracy'])
+    print('Build first model (tweet-level)...')
+    model1 = Sequential()
+    model1.add(Embedding(max_features + 3, 
+                         emb_dim, 
+                         input_length=maxlen,
+                         weights=[embeddings]
+                        ))#, 
+                         #mask_zero=True))
+    model1.add(Convolution1D(nb_filter=nb_filter,
+                             filter_length=filter_length,
+                             border_mode='valid',
+                             activation='relu',
+                             subsample_length=1))
+    model1.add(MaxPooling1D(pool_length=pool_length))
+    model1.add(Flatten())
+    model1.add(Dense(128))
+    model1.add(Activation('relu'))
+    model1.add(Dropout(0.4))
+    model1.add(Dense(1))
+    model1.add(Activation('sigmoid'))
+    model1.compile(loss='binary_crossentropy',
+                   optimizer='adam',
+                   metrics=['accuracy'])
 
-	print('Train...')
-	model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
-		validation_data=(X_test_shuff, y_test_shuff))
+    print('Train...')
+    model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
+        validation_data=(X_test_shuff, y_test_shuff))
 
-	model1.save('tweet_classifier.h5')
+    model1.save('tweet_classifier.h5')
 
-	pred = model1.predict(X_test_flat)
-	pred = pred.reshape((test_shp[0], test_shp[1]))
+    pred = model1.predict(X_test_flat)
+    pred = pred.reshape((test_shp[0], test_shp[1]))
 
-	# account classification with each tweet's classification getting an equal vote
-	predmn = np.mean(pred, axis=1)
-	predmn = (predmn >= 0.5).astype(int)
-	cnnv[range(label_index, label_index + len(predmn))] = predmn
+    # account classification with each tweet's classification getting an equal vote
+    predmn = np.mean(pred, axis=1)
+    predmn = (predmn >= 0.5).astype(int)
+    cnnv[range(label_index, label_index + len(predmn))] = predmn
 
-	# weight by recency (most recent tweets first)
-	wts = np.linspace(1., 0.01, maxtweets)
-	predwm = np.average(pred, axis=1, weights=wts)
-	predwm = (predwm >= 0.5).astype(int)
-	cnnw[range(label_index, label_index + len(predwm))] = predwm
+    # weight by recency (most recent tweets first)
+    wts = np.linspace(1., 0.01, maxtweets)
+    predwm = np.average(pred, axis=1, weights=wts)
+    predwm = (predwm >= 0.5).astype(int)
+    cnnw[range(label_index, label_index + len(predwm))] = predwm
 
-	# reproduce all but last layer of CNN for feeding LSTM
-	intermediate = Sequential()
-	intermediate.add(Embedding(max_features + 3, 
-	                     emb_dim, 
-	                     input_length=maxlen,
-	                     weights=[embeddings]
-	                    ))#, 
-	                     #mask_zero=True))
-	intermediate.add(Convolution1D(nb_filter=nb_filter,
-	                         filter_length=filter_length,
-	                         border_mode='valid',
-	                         activation='relu',
-	                         subsample_length=1))
-	intermediate.add(MaxPooling1D(pool_length=pool_length))
-	intermediate.add(Flatten())
-	intermediate.add(Dense(128))
-	intermediate.add(Activation('relu'))
+    # reproduce all but last layer of CNN for feeding LSTM
+    intermediate = Sequential()
+    intermediate.add(Embedding(max_features + 3, 
+                         emb_dim, 
+                         input_length=maxlen,
+                         weights=[embeddings]
+                        ))#, 
+                         #mask_zero=True))
+    intermediate.add(Convolution1D(nb_filter=nb_filter,
+                             filter_length=filter_length,
+                             border_mode='valid',
+                             activation='relu',
+                             subsample_length=1))
+    intermediate.add(MaxPooling1D(pool_length=pool_length))
+    intermediate.add(Flatten())
+    intermediate.add(Dense(128))
+    intermediate.add(Activation('relu'))
 
-	for l in range(len(intermediate.layers)):
-	    intermediate.layers[l].set_weights(model1.layers[l].get_weights())
-	    intermediate.layers[l]
+    for l in range(len(intermediate.layers)):
+        intermediate.layers[l].set_weights(model1.layers[l].get_weights())
+        intermediate.layers[l]
 
-	intermediate.compile(loss='binary_crossentropy',
-	                     optimizer='adam',
-	                     metrics=['accuracy'])
+    intermediate.compile(loss='binary_crossentropy',
+                         optimizer='adam',
+                         metrics=['accuracy'])
 
-	X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
-	X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
-	X_test_mid = np.fliplr(X_test_mid)
+    X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
+    X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
+    X_test_mid = np.fliplr(X_test_mid)
 
-	batch_size = 32
+    batch_size = 32
 
-	# LSTM to operate on CNN output
-	model2 = Sequential()
-	model2.add(LSTM(128, 
-	               dropout_W=0.2, 
-	               dropout_U=0.2,
-	               input_shape=(X_test_mid.shape[1], X_test_mid.shape[2])))
-	model2.add(Dense(1))
-	model2.add(Activation('sigmoid'))
+    # LSTM to operate on CNN output
+    model2 = Sequential()
+    model2.add(LSTM(128, 
+                   dropout_W=0.2, 
+                   dropout_U=0.2,
+                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2])))
+    model2.add(Dense(1))
+    model2.add(Activation('sigmoid'))
 
-	# try using different optimizers and different optimizer configs
-	model2.compile(loss='binary_crossentropy',
-	              optimizer='adam',
-	              metrics=['accuracy'])
+    # try using different optimizers and different optimizer configs
+    model2.compile(loss='binary_crossentropy',
+                  optimizer='adam',
+                  metrics=['accuracy'])
 
-	# must get output of CNN manually
-	chunk = 256
-	X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-	for i in range(0, train_shp[0], chunk):
-	    last_idx = min(chunk, train_shp[0] - i)
-	    print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-	    X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-	    X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-	    X_train_chunk = np.fliplr(X_train_chunk)
-	    X_train_mid[i:(i + last_idx)] = X_train_chunk
+    # must get output of CNN manually
+    chunk = 256
+    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+    for i in range(0, train_shp[0], chunk):
+        last_idx = min(chunk, train_shp[0] - i)
+        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+        X_train_chunk = np.fliplr(X_train_chunk)
+        X_train_mid[i:(i + last_idx)] = X_train_chunk
 
-	model2.fit(X_train_mid,  
-	           y_train, 
-	           batch_size=batch_size,
-	           nb_epoch=1,
-	           validation_data=(X_test_mid, y_test))
+    model2.fit(X_train_mid,  
+               y_train, 
+               batch_size=batch_size,
+               nb_epoch=1,
+               validation_data=(X_test_mid, y_test))
 
-	pred = model2.predict_classes(X_test_mid).flatten()
+    pred = model2.predict_classes(X_test_mid).flatten()
 
-	lstm[range(label_index, label_index + len(pred))] = pred
+    lstm[range(label_index, label_index + len(pred))] = pred
 
-	# Because we shuffled, this is the only way to know the true y values
-	y = y_test.flatten()
-	gold[range(label_index, label_index + len(y))] = y
+    # Because we shuffled, this is the only way to know the true y values
+    y = y_test.flatten()
+    gold[range(label_index, label_index + len(y))] = y
 
-	label_index = label_index + len(y)
+    label_index = label_index + len(y)
 
 
 print('CNN+V')
@@ -534,15 +534,20 @@ print('LSTM')
 bootstrap(gold, lstm)
 
 with open('/work/dane/cnnCVout.txt', 'w') as f:
-	f.write('gold:\n')
-	f.write(gold)
-	f.write('\ncnnv\n')
-	f.write(cnnv)
-	f.write('\ncnnw\n')
-	f.write(cnnw)
-	f.write('\nlstm\n')
-	f.write(lstm)
-	
+    f.write('gold:\n')
+    for g in gold:
+        f.write(g + " ")
+    f.write('\ncnnv\n')
+    for p in cnnv:
+        f.write(p + " ")
+    f.write('\ncnnw\n')
+    for p in cnnw:
+        f.write(p + " ")
+    f.write('\nlstm\n')
+    for p in lstm:
+        f.write(p + " ")
+    f.write('\n')
+    
 
 
 
