@@ -321,6 +321,59 @@ pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 
+
+#
+# Pretrain cnn
+#
+
+
+print('Build first model (tweet-level)...')
+model1 = Sequential()
+model1.add(Embedding(max_features + 3,
+                     emb_dim,
+                     input_length=maxlen,
+                     weights=[embeddings]
+                    ))#,
+                     #mask_zero=True))
+model1.add(Convolution1D(nb_filter=nb_filter,
+                         filter_length=filter_length,
+                         border_mode='valid',
+                         activation='relu',
+                         subsample_length=1))
+model1.add(MaxPooling1D(pool_length=pool_length))
+model1.add(Flatten())
+model1.add(Dense(128))
+model1.add(Activation('relu'))
+model1.add(Dropout(0.4))
+model1.add(Dense(1))
+model1.add(Activation('sigmoid'))
+model1.compile(loss='binary_crossentropy',
+               optimizer='adam',
+               metrics=['accuracy'])
+
+
+# In[14]:
+
+model1.summary()
+
+
+# In[ ]:
+
+print('Train...')
+model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
+           validation_data=(X_test_shuff, y_test_shuff))
+
+
+# In[16]:
+
+#xmodel1.save('tweet_classifier.h5')
+
+
+# In[17]:
+
+#model1 = load_model('tweet_classifier.h5')
+
+
 #
 #  Base RNN model
 #
@@ -604,9 +657,9 @@ modelMLP.add(GRU(128,
                dropout_U=0.2,
                input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
                return_sequences=True))
-modelMLP.add(TimeDistributed(Dense(64)))
+modelMLP.add(TimeDistributed(Dense(64,activation='relu')))
 modelMLP.add(Flatten())
-modelMLP.add(Dense(200))
+modelMLP.add(Dense(200,activation='relu'))
 modelMLP.add(Dense(1))
 modelMLP.add(Activation('sigmoid'))
 
@@ -649,3 +702,144 @@ score, acc = modelMLP.evaluate(X_test_mid, y_test,
                             batch_size=batch_size)
 print('Test score:', score)
 print('Test accuracy:', acc)
+
+
+
+#
+#  RNN recency weighting model
+#
+
+# ## Intermediate data structure
+#
+# Having trained a tweet-level classifier with `model1`, we now create an identical (trained) net except that we cut off final, classifying layer. This allows us to pass forward a 128-length vector for each tweet. The tweets will then be grouped by account (there being a fixed number of tweets per account). The resulting 2-D structure can be passed to a GRU or LSTM for classification.
+
+# In[25]:
+
+intermediate = Sequential()
+intermediate.add(Embedding(max_features + 3,
+                     emb_dim,
+                     input_length=maxlen,
+                     weights=[embeddings]
+                    ))#,
+                     #mask_zero=True))
+intermediate.add(Convolution1D(nb_filter=nb_filter,
+                         filter_length=filter_length,
+                         border_mode='valid',
+                         activation='relu',
+                         subsample_length=1))
+intermediate.add(MaxPooling1D(pool_length=pool_length))
+intermediate.add(Flatten())
+intermediate.add(Dense(128))
+intermediate.add(Activation('relu'))
+
+for l in range(len(intermediate.layers)):
+    intermediate.layers[l].set_weights(model1.layers[l].get_weights())
+    intermediate.layers[l]
+
+intermediate.compile(loss='binary_crossentropy',
+                     optimizer='adam',
+                     metrics=['accuracy'])
+
+
+# In[26]:
+
+intermediate.summary()
+
+
+# In[28]:
+
+X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
+X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
+X_test_mid = np.fliplr(X_test_mid)
+
+
+# ## GRU classification
+#
+# This is the second part of the net, which takes in the 2D account representation and returns an account classification.
+
+# In[29]:
+
+batch_size = 32
+
+modelRWeight = Sequential()
+modelRWeight.add(GRU(128,
+               dropout_W=0.2,
+               dropout_U=0.2,
+               input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
+               return_sequences=True))
+modelRWeight.add(TimeDistributed(Dense(64, activation='relu')))
+modelRWeight.add(TimeDistributed(Dense(64, activation='relu')))
+modelRWeight.add(TimeDistributed(Dense(1, activation='sigmoid')))
+
+# try using different optimizers and different optimizer configs
+modelRWeight.compile(loss='binary_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy'])
+
+
+# In[30]:
+
+modelRWeight.summary()
+
+
+# In[31]:
+
+chunk = 256
+X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+for i in range(0, train_shp[0], chunk):
+    last_idx = min(chunk, train_shp[0] - i)
+    print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+    X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+    X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+    X_train_chunk = np.fliplr(X_train_chunk)
+    X_train_mid[i:(i + last_idx)] = X_train_chunk
+
+
+# In[32]:
+
+modelRWeight.fit(X_train_mid,
+           y_train_flat,
+           batch_size=batch_size,
+           nb_epoch=nb_epoch,
+           validation_data=(X_test_mid, y_test_flat))
+
+
+# In[33]:
+
+score, acc = modelRWeight.evaluate(X_test_mid, y_test_flat,
+                            batch_size=batch_size)
+print('Test score:', score)
+print('Test accuracy:', acc)
+
+
+# In[20]:
+
+pred = modelRWeight.predict(X_test_mid)
+pred = pred.reshape((test_shp[0], test_shp[1]))
+
+
+# In[23]:
+
+# account classification with each tweet's classification getting an equal vote
+predmn = np.mean(pred, axis=1)
+predmn = (predmn >= 0.5).astype(int)
+
+# weight by recency (most recent tweets first)
+wts = np.linspace(1., 0.01, 2000)
+predwm = np.average(pred, axis=1, weights=wts)
+predwm = (predwm >= 0.5).astype(int)
+
+
+# In[24]:
+
+y = y_test.flatten()
+
+print('Unweighted mean')
+bootstrap(y, predmn)
+
+print('\nWeighted mean')
+bootstrap(y, predwm)
+
+
+
+
