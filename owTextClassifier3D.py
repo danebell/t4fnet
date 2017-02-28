@@ -163,7 +163,7 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
                     vocab='ow3d.dict.pkl', 
-                    w2v='/Users/laparra/Data/Datasets/SocialMedia/twitter4food/food_vectors_clean.txt'):
+                    w2v='/data/nlp/corpora/twitter4food/food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
     word_index = pkl.load(f)
@@ -363,12 +363,12 @@ model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoc
 
 # In[16]:
 
-model1.save('tweet_classifier.h5')
+#xmodel1.save('tweet_classifier.h5')
 
 
 # In[17]:
 
-model1 = load_model('tweet_classifier.h5')
+#model1 = load_model('tweet_classifier.h5')
 
 
 # In[18]:
