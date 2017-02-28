@@ -163,7 +163,7 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
                     vocab='ow3d.dict.pkl', 
-                    w2v='/data/nlp/corpora/twitter4food/food_vectors_clean.txt'):
+                    w2v='food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
     word_index = pkl.load(f)
