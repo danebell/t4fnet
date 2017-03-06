@@ -371,12 +371,12 @@ model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoc
 
 # In[16]:
 
-model1.save('tweet_classifier.h5')
+#model1.save('tweet_classifier.h5')
 
 
 # In[17]:
 
-model1 = load_model('tweet_classifier.h5')
+#model1 = load_model('tweet_classifier.h5')
 
 
 #
