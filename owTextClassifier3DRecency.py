@@ -272,6 +272,10 @@ maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
 (X_train, y_train), (X_test, y_test) = load_data(nb_words=max_features, maxlen=maxlen)
+X_train = X_train[:100]
+y_train = y_train[:100]
+X_test = X_test[:50]
+y_test = y_test[:50]
 print(len(X_train), 'train sequences')
 print(len(X_test), 'test sequences')
 
@@ -332,20 +336,21 @@ model1 = Sequential()
 model1.add(Embedding(max_features + 3,
                      emb_dim,
                      input_length=maxlen,
-                     weights=[embeddings]
-                    ))#,
+                     weights=[embeddings],
+                    name="emb"))#,
                      #mask_zero=True))
 model1.add(Convolution1D(nb_filter=nb_filter,
                          filter_length=filter_length,
                          border_mode='valid',
                          activation='relu',
-                         subsample_length=1))
+                         subsample_length=1,
+                         name="conv1d"))
 model1.add(MaxPooling1D(pool_length=pool_length))
 model1.add(Flatten())
-model1.add(Dense(128))
+model1.add(Dense(128, name="dense1"))
 model1.add(Activation('relu'))
-model1.add(Dropout(0.4))
-model1.add(Dense(1))
+model1.add(Dropout(0.4, name="dense2"))
+model1.add(Dense(1, name="dense3"))
 model1.add(Activation('sigmoid'))
 model1.compile(loss='binary_crossentropy',
                optimizer='adam',
