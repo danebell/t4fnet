@@ -753,7 +753,8 @@ elif (sys.argv[1] == "relu"):
     batch_size = 32
 
     recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
-    recentRelu = TimeDistributed(Dense(1, activation="relu"))(recentInput)
+    #recentRelu = TimeDistributed(Dense(1, activation="relu"))(recentInput)
+    recentRelu = TimeDistributed(Dense(1, activation="softplus"))(recentInput)
     repeatRelu = TimeDistributed(RepeatVector(128))(recentRelu)
     reshapeRelu = Reshape((train_shp[1], 128))(repeatRelu)
     cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
