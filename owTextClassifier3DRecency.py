@@ -274,10 +274,10 @@ maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
 (X_train, y_train), (X_test, y_test) = load_data(nb_words=max_features, maxlen=maxlen)
-# X_train = X_train[:50]
-# y_train = y_train[:50]
-# X_test = X_test[:10]
-# y_test = y_test[:10]
+# X_train = X_train[:100]
+# y_train = y_train[:100]
+# X_test = X_test[:50]
+# y_test = y_test[:50]
 print(len(X_train), 'train sequences')
 print(len(X_test), 'test sequences')
 
@@ -373,11 +373,11 @@ if (sys.argv[2] == "pre"):
                validation_data=(X_test_shuff, y_test_shuff))
 
 # In[16]:
-    model1.save('tweet_classifier.h5')
+    model1.save_weights('tweet_classifier.h5')
 
 # In[17]:
 else:
-    model1 = load_model('tweet_classifier.h5')
+    model1.load_weights('tweet_classifier.h5')
 
 # ## Intermediate data structure
 # 
