@@ -472,490 +472,533 @@ if (sys.argv[2] == "pre"):
 else:
     model1.load_weights('tweet_classifier.h5')
 
-# ## Intermediate data structure
-# 
-# Having trained a tweet-level classifier with `model1`, we now create an identical (trained) net except that we cut off final, classifying layer. This allows us to pass forward a 128-length vector for each tweet. The tweets will then be grouped by account (there being a fixed number of tweets per account). The resulting 2-D structure can be passed to a GRU or LSTM for classification.
 
-# In[25]:
-
-intermediate = Sequential()
-intermediate.add(Embedding(max_features + 3, 
-                     emb_dim, 
-                     input_length=maxlen,
-                     weights=[embeddings]
-                    ))#, 
-                     #mask_zero=True))
-intermediate.add(Convolution1D(nb_filter=nb_filter,
-                         filter_length=filter_length,
-                         border_mode='valid',
-                         activation='relu',
-                         subsample_length=1))
-intermediate.add(MaxPooling1D(pool_length=pool_length))
-intermediate.add(Flatten())
-intermediate.add(Dense(128))
-intermediate.add(Activation('relu'))
-
-for l in range(len(intermediate.layers)):
-    intermediate.layers[l].set_weights(model1.layers[l].get_weights())
-    intermediate.layers[l]
-
-intermediate.compile(loss='binary_crossentropy',
-                     optimizer='adam',
-                     metrics=['accuracy'])
-
-
-# In[26]:
-
-intermediate.summary()
-
-
-# In[28]:
-
-X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
-X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
-X_test_mid = np.fliplr(X_test_mid)
-y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
-y_test_mid = np.fliplr(y_test_mid)
-
-
-# This is the second part of the net, which takes in the 2D account representation and returns an account classification.
-
-if (sys.argv[1] == "rnn"):
-    #
-    #  Base RNN model
-    #
-
-    # In[29]:
-
-    batch_size = 32
-
-    modelBase = Sequential()
-    modelBase.add(GRU(128,
-                   dropout_W=0.2,
-                   dropout_U=0.2,
-                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2])))
-    modelBase.add(Dense(1))
-    modelBase.add(Activation('sigmoid'))
-
-    # try using different optimizers and different optimizer configs
-    modelBase.compile(loss='binary_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
-
-
-    # In[30]:
-
-    modelBase.summary()
-
-
-    # In[31]:
-
-    chunk = 256
-    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    for i in range(0, train_shp[0], chunk):
-        last_idx = min(chunk, train_shp[0] - i)
-        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-        X_train_chunk = np.fliplr(X_train_chunk)
-        X_train_mid[i:(i + last_idx)] = X_train_chunk
-
-    modelBase.fit(X_train_mid,
-               y_train,
-               batch_size=batch_size,
-               nb_epoch=nb_epoch,
-               validation_data=(X_test_mid, y_test))
-
-
-    # In[33]:
-
-    score, acc = modelBase.evaluate(X_test_mid, y_test,
-                                batch_size=batch_size)
+if (sys.argv[1] == "cnn"):
+    # In[ ]:
+    
+    score, acc = model1.evaluate(X_test_flat, y_test_flat, batch_size=batch_size)
+    
+    
+    # In[ ]:
+    
     print('Test score:', score)
     print('Test accuracy:', acc)
-
-
-elif (sys.argv[1] == "stacked"):
-    #
-    #  Stacked RNN model
-    # The first RNN layer returns sequences to feed the stacked RNN layer
-    #
-
-    # In[29]:
-
-    batch_size = 32
-
-    modelStack = Sequential()
-    modelStack.add(GRU(128,
-                   dropout_W=0.2,
-                   dropout_U=0.2,
-                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
-                   return_sequences=True))
-    modelStack.add(GRU(128,
-                   dropout_W=0.2,
-                   dropout_U=0.2))
-    modelStack.add(Dense(1))
-    modelStack.add(Activation('sigmoid'))
-
-    # try using different optimizers and different optimizer configs
-    modelStack.compile(loss='binary_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
-
-
-    # In[30]:
-
-    modelStack.summary()
-
-
-    # In[31]:
-
-    chunk = 256
-    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    for i in range(0, train_shp[0], chunk):
-        last_idx = min(chunk, train_shp[0] - i)
-        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-        X_train_chunk = np.fliplr(X_train_chunk)
-        X_train_mid[i:(i + last_idx)] = X_train_chunk
-
-
-    # In[32]:
-
-    modelStack.fit(X_train_mid,
-               y_train,
-               batch_size=batch_size,
-               nb_epoch=nb_epoch,
-               validation_data=(X_test_mid, y_test))
-
-
-    # In[33]:
-
-    score, acc = modelStack.evaluate(X_test_mid, y_test,
-                                batch_size=batch_size)
-    print('Test score:', score)
-    print('Test accuracy:', acc)
-
-
-
-elif (sys.argv[1] == "mlp"):
-    #
-    #  RNN+MLP model
-    #
-
-    # In[29]:
-
-    batch_size = 32
-
-    modelMLP = Sequential()
-    modelMLP.add(GRU(128,
-                   dropout_W=0.2,
-                   dropout_U=0.2,
-                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
-                   return_sequences=True))
-    modelMLP.add(TimeDistributed(Dense(64,activation='relu')))
-    modelMLP.add(Flatten())
-    modelMLP.add(Dense(200,activation='relu'))
-    modelMLP.add(Dense(1))
-    modelMLP.add(Activation('sigmoid'))
-
-    # try using different optimizers and different optimizer configs
-    modelMLP.compile(loss='binary_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
-
-
-    # In[30]:
-
-    modelMLP.summary()
-
-
-    # In[31]:
-
-    chunk = 256
-    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    for i in range(0, train_shp[0], chunk):
-        last_idx = min(chunk, train_shp[0] - i)
-        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-        X_train_chunk = np.fliplr(X_train_chunk)
-        X_train_mid[i:(i + last_idx)] = X_train_chunk
-
-
-    # In[32]:
-
-    modelMLP.fit(X_train_mid,
-               y_train,
-               batch_size=batch_size,
-               nb_epoch=nb_epoch,
-               validation_data=(X_test_mid, y_test))
-
-
-    # In[33]:
-
-    score, acc = modelMLP.evaluate(X_test_mid, y_test,
-                                batch_size=batch_size)
-    print('Test score:', score)
-    print('Test accuracy:', acc)
-
-
-elif (sys.argv[1] == "weighting"):
-    #
-    #  RNN recency weighting model
-    # In[29]:
-
-    batch_size = 32
-
-    modelRWeight = Sequential()
-    modelRWeight.add(GRU(128,
-                   dropout_W=0.2,
-                   dropout_U=0.2,
-                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
-                   return_sequences=True))
-    modelRWeight.add(TimeDistributed(Dense(1, activation='sigmoid')))
-
-    # try using different optimizers and different optimizer configs
-    modelRWeight.compile(loss='binary_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
-
-
-    # In[30]:
-
-    modelRWeight.summary()
-
-
-    # In[31]:
-
-    chunk = 256
-    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
-    for i in range(0, train_shp[0], chunk):
-        last_idx = min(chunk, train_shp[0] - i)
-        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-        X_train_chunk = np.fliplr(X_train_chunk)
-        X_train_mid[i:(i + last_idx)] = X_train_chunk
-        y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
-        y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
-        y_train_chunk = np.fliplr(y_train_chunk)
-        y_train_mid[i:(i + last_idx)] = y_train_chunk
-
-
-    # In[32]:
-
-    modelRWeight.fit(X_train_mid,
-               y_train_mid,
-               batch_size=batch_size,
-               nb_epoch=nb_epoch,
-               validation_data=(X_test_mid, y_test_mid))
-
-
-    # In[33]:
-
-    score, acc = modelRWeight.evaluate(X_test_mid, y_test_mid,
-                                batch_size=batch_size)
-    print('Test score:', score)
-    print('Test accuracy:', acc)
-
-
-    # In[20]:
-
-    pred = modelRWeight.predict(X_test_mid)
+    
+    
+    # In[ ]:
+    
+    pred = model1.predict(X_test_flat)
     pred = pred.reshape((test_shp[0], test_shp[1]))
-
-    # In[23]:
-
+    
+    
+    # In[ ]:
+    
     # account classification with each tweet's classification getting an equal vote
     predmn = np.mean(pred, axis=1)
     predmn = (predmn >= 0.5).astype(int)
-
+    
     # weight by recency (most recent tweets first)
-    wts = np.linspace(0.01, 1., 2000)
+    wts = np.linspace(1., 0.01, 2000)
     predwm = np.average(pred, axis=1, weights=wts)
     predwm = (predwm >= 0.5).astype(int)
-
-
-    # In[24]:
-
+    
+    
+    # In[ ]:
+    
     y = y_test.flatten()
-
+    
     print('Unweighted mean')
     bootstrap(y, predmn)
-
+    
     print('\nWeighted mean')
-    bootstrap(y, predwm)
+    bootstrap(y, predwm)    
+    
 
-
-elif (sys.argv[1] == "pool"):
-    #
-    #  RNN recency weighting with relu model
-    # In[29]:
-
-    batch_size = 32
-
-    cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
-    averagePooling = GlobalAveragePooling1D()(cnnInput)
-    dropout = Dropout(0.4)(averagePooling)
-    top = Dense(1, activation='sigmoid')(dropout)
-    modelRelu = Model(input=[cnnInput], output=[top])
-    modelRelu.compile(loss='binary_crossentropy',
+else:
+    # ## Intermediate data structure
+    # 
+    # Having trained a tweet-level classifier with `model1`, we now create an identical (trained) net except that we cut off final, classifying layer. This allows us to pass forward a 128-length vector for each tweet. The tweets will then be grouped by account (there being a fixed number of tweets per account). The resulting 2-D structure can be passed to a GRU or LSTM for classification.
+    
+    # In[25]:
+    
+    intermediate = Sequential()
+    intermediate.add(Embedding(max_features + 3, 
+                         emb_dim, 
+                         input_length=maxlen,
+                         weights=[embeddings]
+                        ))#, 
+                         #mask_zero=True))
+    intermediate.add(Convolution1D(nb_filter=nb_filter,
+                             filter_length=filter_length,
+                             border_mode='valid',
+                             activation='relu',
+                             subsample_length=1))
+    intermediate.add(MaxPooling1D(pool_length=pool_length))
+    intermediate.add(Flatten())
+    intermediate.add(Dense(128))
+    intermediate.add(Activation('relu'))
+    
+    for l in range(len(intermediate.layers)):
+        intermediate.layers[l].set_weights(model1.layers[l].get_weights())
+        intermediate.layers[l]
+    
+    intermediate.compile(loss='binary_crossentropy',
+                         optimizer='adam',
+                         metrics=['accuracy'])
+    
+    
+    # In[26]:
+    
+    intermediate.summary()
+    
+    
+    # In[28]:
+    
+    X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
+    X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
+    X_test_mid = np.fliplr(X_test_mid)
+    y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
+    y_test_mid = np.fliplr(y_test_mid)
+    
+    
+    # This is the second part of the net, which takes in the 2D account representation and returns an account classification.
+    
+    if (sys.argv[1] == "rnn"):
+        #
+        #  Base RNN model
+        #
+    
+        # In[29]:
+    
+        batch_size = 32
+    
+        modelBase = Sequential()
+        modelBase.add(GRU(128,
+                       dropout_W=0.2,
+                       dropout_U=0.2,
+                       input_shape=(X_test_mid.shape[1], X_test_mid.shape[2])))
+        modelBase.add(Dense(1))
+        modelBase.add(Activation('sigmoid'))
+    
+        # try using different optimizers and different optimizer configs
+        modelBase.compile(loss='binary_crossentropy',
                       optimizer='adam',
                       metrics=['accuracy'])
-
-    # In[30]:
-
-    modelRelu.summary()
-
-    # In[31]:
-
-    chunk = 256
-    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    for i in range(0, train_shp[0], chunk):
-        last_idx = min(chunk, train_shp[0] - i)
-        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets: (i + last_idx) * maxtweets])))
-        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-        X_train_chunk = np.fliplr(X_train_chunk)
-        X_train_mid[i:(i + last_idx)] = X_train_chunk
-
-    # In[32]:
-
-    modelRelu.fit(X_train_mid,
-                  y_train,
-                  batch_size=batch_size,
-                  nb_epoch=nb_epoch,
-                  validation_data=(X_test_mid, y_test))
-
-    # In[33]:
-
-    score, acc = modelRelu.evaluate(X_test_mid, y_test,
-                                    batch_size=batch_size)
-    print('Test score:', score)
-    print('Test accuracy:', acc)
-
-
-elif (sys.argv[1] == "relu"):
-    #
-    #  RNN recency weighting with relu model
-    # In[29]:
-
-    batch_size = 32
-
-    recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
-    recentRelu = TimeDistributed(Dense(1, activation="relu"))(recentInput)
-    #recentRelu = TimeDistributed(Dense(1, activation="softplus"))(recentInput)
-    #recentNorm = TimeDistributed(Activation(activation='tanh'))(recentRelu)
-    repeatRelu = TimeDistributed(RepeatVector(128))(recentRelu)
-    reshapeRelu = Reshape((train_shp[1], 128))(repeatRelu)
-    cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
-    mergedInputs = merge([cnnInput, reshapeRelu], mode='mul')
-    averagePooling = GlobalAveragePooling1D()(mergedInputs)
-    dropout = Dropout(0.4)(averagePooling)
-    top = Dense(1, activation='sigmoid')(dropout)
-    modelRelu = Model(input=[recentInput, cnnInput], output=[top])
-    modelRelu.compile(loss='binary_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
-
-
-    # In[30]:
-
-    modelRelu.summary()
-
-    wts = np.linspace(0.01, 1, train_shp[1])
-    wtsTrain = np.tile(wts,(train_shp[0],1))
-    wtsTrain = np.reshape(wtsTrain, (train_shp[0], train_shp[1], 1))
-
-    wtsTest = np.tile(wts, (test_shp[0], 1))
-    wtsTest = np.reshape(wtsTest, (test_shp[0], train_shp[1], 1))
     
-    # In[31]:
-
-    chunk = 256
-    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    for i in range(0, train_shp[0], chunk):
-        last_idx = min(chunk, train_shp[0] - i)
-        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-        X_train_chunk = np.fliplr(X_train_chunk)
-        X_train_mid[i:(i + last_idx)] = X_train_chunk
-
-                    
-    # In[32]:
-
-    modelRelu.fit([wtsTrain, X_train_mid],
-                y_train,
-                batch_size=batch_size,
-                nb_epoch=nb_epoch,
-                validation_data=([wtsTest, X_test_mid], y_test))
-
-
-    # In[33]:
-
-    score, acc = modelRelu.evaluate([wtsTest, X_test_mid], y_test,
-                                batch_size=batch_size)
-    print('Test score:', score)
-    print('Test accuracy:', acc)
-
-
-elif (sys.argv[1] == "attention"):
-    #
-    #  RNN recency weighting with relu model
-    # In[29]:
-
-    batch_size = 32
-
-    cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
-    cnnTanh = TimeDistributed(Activation(activation='tanh'))(cnnInput)
-    attention = TimeDistributed(Dense(1, activation='softmax'))(cnnTanh)
-    attention = TimeDistributed(RepeatVector(128))(attention)
-    attention = Reshape((train_shp[1], 128))(attention)
-    mergedInputs = merge([cnnInput, attention], mode='mul')
-    averagePooling = GlobalAveragePooling1D()(mergedInputs)
-    dropout = Dropout(0.4)(averagePooling)
-    top = Dense(1, activation='sigmoid')(dropout)
-    modelRelu = Model(input=[cnnInput], output=[top])
-    modelRelu.compile(loss='binary_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
-
-
-    # In[30]:
-
-    modelRelu.summary()
-
-    # In[31]:
-
-    chunk = 256
-    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    for i in range(0, train_shp[0], chunk):
-        last_idx = min(chunk, train_shp[0] - i)
-        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-        X_train_chunk = np.fliplr(X_train_chunk)
-        X_train_mid[i:(i + last_idx)] = X_train_chunk
-
-    # In[32]:
-
-    modelRelu.fit(X_train_mid,
-                y_train,
-                batch_size=batch_size,
-                nb_epoch=nb_epoch,
-                validation_data=(X_test_mid, y_test))
-
-
-    # In[33]:
-
-    score, acc = modelRelu.evaluate(X_test_mid, y_test,
-                                batch_size=batch_size)
-    print('Test score:', score)
-    print('Test accuracy:', acc)
+    
+        # In[30]:
+    
+        modelBase.summary()
+    
+    
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+    
+        modelBase.fit(X_train_mid,
+                   y_train,
+                   batch_size=batch_size,
+                   nb_epoch=nb_epoch,
+                   validation_data=(X_test_mid, y_test))
+    
+    
+        # In[33]:
+    
+        score, acc = modelBase.evaluate(X_test_mid, y_test,
+                                    batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+    
+    
+    elif (sys.argv[1] == "stacked"):
+        #
+        #  Stacked RNN model
+        # The first RNN layer returns sequences to feed the stacked RNN layer
+        #
+    
+        # In[29]:
+    
+        batch_size = 32
+    
+        modelStack = Sequential()
+        modelStack.add(GRU(128,
+                       dropout_W=0.2,
+                       dropout_U=0.2,
+                       input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
+                       return_sequences=True))
+        modelStack.add(GRU(128,
+                       dropout_W=0.2,
+                       dropout_U=0.2))
+        modelStack.add(Dense(1))
+        modelStack.add(Activation('sigmoid'))
+    
+        # try using different optimizers and different optimizer configs
+        modelStack.compile(loss='binary_crossentropy',
+                      optimizer='adam',
+                      metrics=['accuracy'])
+    
+    
+        # In[30]:
+    
+        modelStack.summary()
+    
+    
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+    
+    
+        # In[32]:
+    
+        modelStack.fit(X_train_mid,
+                   y_train,
+                   batch_size=batch_size,
+                   nb_epoch=nb_epoch,
+                   validation_data=(X_test_mid, y_test))
+    
+    
+        # In[33]:
+    
+        score, acc = modelStack.evaluate(X_test_mid, y_test,
+                                    batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+    
+    
+    
+    elif (sys.argv[1] == "mlp"):
+        #
+        #  RNN+MLP model
+        #
+    
+        # In[29]:
+    
+        batch_size = 32
+    
+        modelMLP = Sequential()
+        modelMLP.add(GRU(128,
+                       dropout_W=0.2,
+                       dropout_U=0.2,
+                       input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
+                       return_sequences=True))
+        modelMLP.add(TimeDistributed(Dense(64,activation='relu')))
+        modelMLP.add(Flatten())
+        modelMLP.add(Dense(200,activation='relu'))
+        modelMLP.add(Dense(1))
+        modelMLP.add(Activation('sigmoid'))
+    
+        # try using different optimizers and different optimizer configs
+        modelMLP.compile(loss='binary_crossentropy',
+                      optimizer='adam',
+                      metrics=['accuracy'])
+    
+    
+        # In[30]:
+    
+        modelMLP.summary()
+    
+    
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+    
+    
+        # In[32]:
+    
+        modelMLP.fit(X_train_mid,
+                   y_train,
+                   batch_size=batch_size,
+                   nb_epoch=nb_epoch,
+                   validation_data=(X_test_mid, y_test))
+    
+    
+        # In[33]:
+    
+        score, acc = modelMLP.evaluate(X_test_mid, y_test,
+                                    batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+    
+    
+    elif (sys.argv[1] == "weighting"):
+        #
+        #  RNN recency weighting model
+        # In[29]:
+    
+        batch_size = 32
+    
+        modelRWeight = Sequential()
+        modelRWeight.add(GRU(128,
+                       dropout_W=0.2,
+                       dropout_U=0.2,
+                       input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
+                       return_sequences=True))
+        modelRWeight.add(TimeDistributed(Dense(1, activation='sigmoid')))
+    
+        # try using different optimizers and different optimizer configs
+        modelRWeight.compile(loss='binary_crossentropy',
+                      optimizer='adam',
+                      metrics=['accuracy'])
+    
+    
+        # In[30]:
+    
+        modelRWeight.summary()
+    
+    
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+            y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
+            y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
+            y_train_chunk = np.fliplr(y_train_chunk)
+            y_train_mid[i:(i + last_idx)] = y_train_chunk
+    
+    
+        # In[32]:
+    
+        modelRWeight.fit(X_train_mid,
+                   y_train_mid,
+                   batch_size=batch_size,
+                   nb_epoch=nb_epoch,
+                   validation_data=(X_test_mid, y_test_mid))
+    
+    
+        # In[33]:
+    
+        score, acc = modelRWeight.evaluate(X_test_mid, y_test_mid,
+                                    batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+    
+    
+        # In[20]:
+    
+        pred = modelRWeight.predict(X_test_mid)
+        pred = pred.reshape((test_shp[0], test_shp[1]))
+    
+        # In[23]:
+    
+        # account classification with each tweet's classification getting an equal vote
+        predmn = np.mean(pred, axis=1)
+        predmn = (predmn >= 0.5).astype(int)
+    
+        # weight by recency (most recent tweets first)
+        wts = np.linspace(0.01, 1., 2000)
+        predwm = np.average(pred, axis=1, weights=wts)
+        predwm = (predwm >= 0.5).astype(int)
+    
+    
+        # In[24]:
+    
+        y = y_test.flatten()
+    
+        print('Unweighted mean')
+        bootstrap(y, predmn)
+    
+        print('\nWeighted mean')
+        bootstrap(y, predwm)
+    
+    
+    elif (sys.argv[1] == "pool"):
+        #
+        #  RNN recency weighting with relu model
+        # In[29]:
+    
+        batch_size = 32
+    
+        cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
+        averagePooling = GlobalAveragePooling1D()(cnnInput)
+        dropout = Dropout(0.4)(averagePooling)
+        top = Dense(1, activation='sigmoid')(dropout)
+        modelRelu = Model(input=[cnnInput], output=[top])
+        modelRelu.compile(loss='binary_crossentropy',
+                          optimizer='adam',
+                          metrics=['accuracy'])
+    
+        # In[30]:
+    
+        modelRelu.summary()
+    
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets: (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+    
+        # In[32]:
+    
+        modelRelu.fit(X_train_mid,
+                      y_train,
+                      batch_size=batch_size,
+                      nb_epoch=nb_epoch,
+                      validation_data=(X_test_mid, y_test))
+    
+        # In[33]:
+    
+        score, acc = modelRelu.evaluate(X_test_mid, y_test,
+                                        batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+    
+    
+    elif (sys.argv[1] == "relu"):
+        #
+        #  RNN recency weighting with relu model
+        # In[29]:
+    
+        batch_size = 32
+    
+        recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
+        recentRelu = TimeDistributed(Dense(1, activation="relu"))(recentInput)
+        #recentRelu = TimeDistributed(Dense(1, activation="softplus"))(recentInput)
+        #recentNorm = TimeDistributed(Activation(activation='tanh'))(recentRelu)
+        repeatRelu = TimeDistributed(RepeatVector(128))(recentRelu)
+        reshapeRelu = Reshape((train_shp[1], 128))(repeatRelu)
+        cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
+        mergedInputs = merge([cnnInput, reshapeRelu], mode='mul')
+        averagePooling = GlobalAveragePooling1D()(mergedInputs)
+        dropout = Dropout(0.4)(averagePooling)
+        top = Dense(1, activation='sigmoid')(dropout)
+        modelRelu = Model(input=[recentInput, cnnInput], output=[top])
+        modelRelu.compile(loss='binary_crossentropy',
+                      optimizer='adam',
+                      metrics=['accuracy'])
+    
+    
+        # In[30]:
+    
+        modelRelu.summary()
+    
+        wts = np.linspace(0.01, 1, train_shp[1])
+        wtsTrain = np.tile(wts,(train_shp[0],1))
+        wtsTrain = np.reshape(wtsTrain, (train_shp[0], train_shp[1], 1))
+    
+        wtsTest = np.tile(wts, (test_shp[0], 1))
+        wtsTest = np.reshape(wtsTest, (test_shp[0], train_shp[1], 1))
+        
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+    
+                        
+        # In[32]:
+    
+        modelRelu.fit([wtsTrain, X_train_mid],
+                    y_train,
+                    batch_size=batch_size,
+                    nb_epoch=nb_epoch,
+                    validation_data=([wtsTest, X_test_mid], y_test))
+    
+    
+        # In[33]:
+    
+        score, acc = modelRelu.evaluate([wtsTest, X_test_mid], y_test,
+                                    batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+    
+    
+    elif (sys.argv[1] == "attention"):
+        #
+        #  RNN recency weighting with relu model
+        # In[29]:
+    
+        batch_size = 32
+    
+        cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
+        cnnTanh = TimeDistributed(Activation(activation='tanh'))(cnnInput)
+        attention = TimeDistributed(Dense(1, activation='softmax'))(cnnTanh)
+        attention = TimeDistributed(RepeatVector(128))(attention)
+        attention = Reshape((train_shp[1], 128))(attention)
+        mergedInputs = merge([cnnInput, attention], mode='mul')
+        averagePooling = GlobalAveragePooling1D()(mergedInputs)
+        dropout = Dropout(0.4)(averagePooling)
+        top = Dense(1, activation='sigmoid')(dropout)
+        modelRelu = Model(input=[cnnInput], output=[top])
+        modelRelu.compile(loss='binary_crossentropy',
+                      optimizer='adam',
+                      metrics=['accuracy'])
+    
+    
+        # In[30]:
+    
+        modelRelu.summary()
+    
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+    
+        # In[32]:
+    
+        modelRelu.fit(X_train_mid,
+                    y_train,
+                    batch_size=batch_size,
+                    nb_epoch=nb_epoch,
+                    validation_data=(X_test_mid, y_test))
+    
+    
+        # In[33]:
+    
+        score, acc = modelRelu.evaluate(X_test_mid, y_test,
+                                    batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
 
 
 
