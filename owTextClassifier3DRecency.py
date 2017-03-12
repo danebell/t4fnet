@@ -498,8 +498,7 @@ if (sys.argv[1] == "cnn"):
     predmn = (predmn >= 0.5).astype(int)
     
     # weight by recency (most recent tweets first)
-    #wts = np.linspace(1., 0.01, 2000)
-    wts = np.linspace(0.01, 1., 2000)
+    wts = np.linspace(1., 0.01, 2000)
     predwm = np.average(pred, axis=1, weights=wts)
     predwm = (predwm >= 0.5).astype(int)
     
