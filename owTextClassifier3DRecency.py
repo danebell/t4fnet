@@ -18,6 +18,7 @@ import sys
 from keras.preprocessing import sequence
 from keras.utils import np_utils
 from keras.models import Sequential, load_model, Model
+from keras.layers import BatchNormalization
 from keras.layers import Dense, Dropout, Activation, Embedding, TimeDistributed, Reshape, Input, merge, RepeatVector
 from keras.layers import LSTM, SimpleRNN, GRU
 from keras.layers import Convolution1D, MaxPooling1D, Flatten, GlobalAveragePooling1D
@@ -365,7 +366,6 @@ y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
 
 X_train, y_train = shuffle_in_unison(X_train, y_train)
 X_test, y_test = shuffle_in_unison(X_test, y_test)
-
 
 #X_train = X_train[:5]
 #y_train = y_train[:5]
@@ -846,8 +846,9 @@ elif (sys.argv[1] == "relu"):
     batch_size = 32
 
     recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
-    #recentRelu = TimeDistributed(Dense(1, activation="relu"))(recentInput)
-    recentRelu = TimeDistributed(Dense(1, activation="softplus"))(recentInput)
+    recentRelu = TimeDistributed(Dense(1, activation="relu"))(recentInput)
+    #recentRelu = TimeDistributed(Dense(1, activation="softplus"))(recentInput)
+    #recentNorm = TimeDistributed(Activation(activation='tanh'))(recentRelu)
     repeatRelu = TimeDistributed(RepeatVector(128))(recentRelu)
     reshapeRelu = Reshape((train_shp[1], 128))(repeatRelu)
     cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
@@ -865,13 +866,13 @@ elif (sys.argv[1] == "relu"):
 
     modelRelu.summary()
 
-    wts = np.linspace(1, 0.01, train_shp[1])
+    wts = np.linspace(0.01, 1, train_shp[1])
     wtsTrain = np.tile(wts,(train_shp[0],1))
     wtsTrain = np.reshape(wtsTrain, (train_shp[0], train_shp[1], 1))
 
     wtsTest = np.tile(wts, (test_shp[0], 1))
     wtsTest = np.reshape(wtsTest, (test_shp[0], train_shp[1], 1))
-
+    
     # In[31]:
 
     chunk = 256
@@ -884,6 +885,7 @@ elif (sys.argv[1] == "relu"):
         X_train_chunk = np.fliplr(X_train_chunk)
         X_train_mid[i:(i + last_idx)] = X_train_chunk
 
+                    
     # In[32]:
 
     modelRelu.fit([wtsTrain, X_train_mid],
