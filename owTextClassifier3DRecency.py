@@ -873,6 +873,7 @@ else:
                       nb_epoch=nb_epoch,
                       validation_data=(X_test_mid, y_test))
     
+        
         # In[33]:
     
         score, acc = modelRelu.evaluate(X_test_mid, y_test,
@@ -889,27 +890,26 @@ else:
         batch_size = 32
     
         recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
-        recentRelu = TimeDistributed(Dense(1, activation="relu"))(recentInput)
+        recentRelu = TimeDistributed(Dense(1, activation="relu"), name='relu')(recentInput)
         #recentRelu = TimeDistributed(Dense(1, activation="softplus"))(recentInput)
-        recentNorm = TimeDistributed(Activation(activation='tanh'))(recentRelu)
-        repeatRelu = TimeDistributed(RepeatVector(128))(recentNorm)
-        reshapeRelu = Reshape((train_shp[1], 128))(repeatRelu)
+        recentNorm = TimeDistributed(Dense(1,activation='tanh'),name='tanh_norm')(recentRelu)
+        repeatRelu = TimeDistributed(RepeatVector(128),name='repeat_vector')(recentNorm)
+        reshapeRelu = Reshape((train_shp[1], 128),name='reshape')(repeatRelu)
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
         mergedInputs = merge([cnnInput, reshapeRelu], mode='mul')
-        averagePooling = GlobalAveragePooling1D()(mergedInputs)
-        dropout = Dropout(0.4)(averagePooling)
-        top = Dense(1, activation='sigmoid')(dropout)
+        averagePooling = GlobalAveragePooling1D(name='average')(mergedInputs)
+        dropout = Dropout(0.4, name='dropout')(averagePooling)
+        top = Dense(1, activation='sigmoid', name='top_sigmoid')(dropout)
         modelRelu = Model(input=[recentInput, cnnInput], output=[top])
         modelRelu.compile(loss='binary_crossentropy',
                       optimizer='adam',
                       metrics=['accuracy'])
     
-    
         # In[30]:
     
         modelRelu.summary()
     
-        wts = np.linspace(0.01, 1, train_shp[1])
+        wts = np.linspace(-1, 1, train_shp[1])
         wtsTrain = np.tile(wts,(train_shp[0],1))
         wtsTrain = np.reshape(wtsTrain, (train_shp[0], train_shp[1], 1))
     
@@ -938,6 +938,7 @@ else:
                     validation_data=([wtsTest, X_test_mid], y_test))
     
     
+
         # In[33]:
     
         score, acc = modelRelu.evaluate([wtsTest, X_test_mid], y_test,
