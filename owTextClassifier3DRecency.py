@@ -954,8 +954,10 @@ else:
         batch_size = 32
     
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
-        cnnTanh = TimeDistributed(Activation(activation='tanh'))(cnnInput)
-        attention = TimeDistributed(Dense(1, activation='softmax'))(cnnTanh)
+        #cnnTanh = TimeDistributed(Activation(activation='tanh'))(cnnInput)
+        cnnTanh = TimeDistributed(Dense(activation='tanh'))(cnnInput)
+        #attention = TimeDistributed(Dense(1, activation='softmax'))(cnnTanh)
+        attention = TimeDistributed(Dense(1, activation='softmax',bias=False))(cnnTanh)
         attention = TimeDistributed(RepeatVector(128))(attention)
         attention = Reshape((train_shp[1], 128))(attention)
         mergedInputs = merge([cnnInput, attention], mode='mul')
