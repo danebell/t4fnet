@@ -274,10 +274,10 @@ maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
 (X_train, y_train), (X_test, y_test) = load_data(nb_words=max_features, maxlen=maxlen)
-#X_train = X_train[:50]
-#y_train = y_train[:50]
-#X_test = X_test[:10]
-#y_test = y_test[:10]
+X_train = X_train[:500]
+y_train = y_train[:500]
+X_test = X_test[:10]
+y_test = y_test[:10]
 print(len(X_train), 'train sequences')
 print(len(X_test), 'test sequences')
 
@@ -364,7 +364,7 @@ batch_size = 256 # how many tweets to train at a time
 
 # In[14]:
 
-model1 = load_model('tweetmodel.h5')
+model1 = load_model('models/tweet_classifier.h5')
 
 model1.summary()
 
