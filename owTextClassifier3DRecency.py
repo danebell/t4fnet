@@ -892,8 +892,8 @@ else:
         recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
         recentRelu = TimeDistributed(Dense(1, activation="relu"), name='relu')(recentInput)
         #recentRelu = TimeDistributed(Dense(1, activation="softplus"))(recentInput)
-        #recentNorm = TimeDistributed(Dense(1,activation='tanh'),name='tanh_norm')(recentRelu)
-        repeatRelu = TimeDistributed(RepeatVector(128),name='repeat_vector')(recentRelu)
+        recentNorm = TimeDistributed(Dense(1,activation='tanh'),name='tanh_norm')(recentRelu)
+        repeatRelu = TimeDistributed(RepeatVector(128),name='repeat_vector')(recentNorm)
         reshapeRelu = Reshape((train_shp[1], 128),name='reshape')(repeatRelu)
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
         mergedInputs = merge([cnnInput, reshapeRelu], mode='mul')
@@ -909,7 +909,7 @@ else:
     
         modelRelu.summary()
     
-        wts = np.linspace(-1, 1, train_shp[1])
+        wts = np.linspace(0.1, 1, train_shp[1])
         wtsTrain = np.tile(wts,(train_shp[0],1))
         wtsTrain = np.reshape(wtsTrain, (train_shp[0], train_shp[1], 1))
     
