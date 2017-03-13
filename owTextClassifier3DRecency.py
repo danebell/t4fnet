@@ -20,7 +20,7 @@ from keras.utils import np_utils
 from keras.models import Sequential, load_model, Model
 from keras.layers import BatchNormalization
 from keras.layers import Dense, Dropout, Activation, Embedding, TimeDistributed, Reshape, Input, merge, RepeatVector
-from keras.layers import LSTM, SimpleRNN, GRU
+from keras.layers import LSTM, SimpleRNN, GRU, Bidirectional
 from keras.layers import Convolution1D, MaxPooling1D, Flatten, GlobalAveragePooling1D
 from keras.layers.core import K
 
@@ -367,10 +367,10 @@ y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
 X_train, y_train = shuffle_in_unison(X_train, y_train)
 X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-#X_train = X_train[:5]
-#y_train = y_train[:5]
-#X_test = X_test[:1]
-#y_test = y_test[:1]
+# X_train = X_train[:10]
+# y_train = y_train[:10]
+# X_test = X_test[:5]
+# y_test = y_test[:5]
 print(len(X_train), 'train sequences')
 print(len(X_test), 'test sequences')
 
@@ -460,17 +460,15 @@ model1.summary()
 
 # In[15]:
 
-print('Train...')
 if (sys.argv[2] == "pre"):
+    print('Train...')
     model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
                validation_data=(X_test_shuff, y_test_shuff))
+    model1.save_weights('models/tweet_classifier.h5')
 
-# In[16]:
-    model1.save_weights('tweet_classifier.h5')
-
-# In[17]:
 else:
-    model1.load_weights('tweet_classifier.h5')
+    print('Load model...')
+    model1.load_weights('models/tweet_classifier.h5')
 
 
 if (sys.argv[1] == "cnn"):
@@ -572,23 +570,23 @@ else:
     
         batch_size = 32
     
-        modelBase = Sequential()
-        modelBase.add(GRU(128,
+        modelRNN = Sequential()
+        modelRNN.add(GRU(128,
                        dropout_W=0.2,
                        dropout_U=0.2,
                        input_shape=(X_test_mid.shape[1], X_test_mid.shape[2])))
-        modelBase.add(Dense(1))
-        modelBase.add(Activation('sigmoid'))
+        modelRNN.add(Dense(1))
+        modelRNN.add(Activation('sigmoid'))
     
         # try using different optimizers and different optimizer configs
-        modelBase.compile(loss='binary_crossentropy',
+        modelRNN.compile(loss='binary_crossentropy',
                       optimizer='adam',
                       metrics=['accuracy'])
     
     
         # In[30]:
-    
-        modelBase.summary()
+
+        modelRNN.summary()
     
     
         # In[31]:
@@ -602,22 +600,32 @@ else:
             X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
             X_train_chunk = np.fliplr(X_train_chunk)
             X_train_mid[i:(i + last_idx)] = X_train_chunk
-    
-        modelBase.fit(X_train_mid,
-                   y_train,
-                   batch_size=batch_size,
-                   nb_epoch=nb_epoch,
-                   validation_data=(X_test_mid, y_test))
-    
-    
+
+        if (sys.argv[3] == "train"):
+            modelRNN.fit(X_train_mid,
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=(X_test_mid, y_test))
+            modelRNN.save_weights('models/rnn.h5')
+        else:
+            print('Load model...')
+            modelRNN.load_weights('models/rnn.h5')
+
+
         # In[33]:
     
-        score, acc = modelBase.evaluate(X_test_mid, y_test,
+        score, acc = modelRNN.evaluate(X_test_mid, y_test,
                                     batch_size=batch_size)
         print('Test score:', score)
         print('Test accuracy:', acc)
-    
-    
+
+        pred = modelRNN.predict(X_test_mid)
+        pred = pred.flatten()
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
+        bootstrap(y, pred)
+
     elif (sys.argv[1] == "stacked"):
         #
         #  Stacked RNN model
@@ -665,14 +673,18 @@ else:
     
     
         # In[32]:
-    
-        modelStack.fit(X_train_mid,
-                   y_train,
-                   batch_size=batch_size,
-                   nb_epoch=nb_epoch,
-                   validation_data=(X_test_mid, y_test))
-    
-    
+        if (sys.argv[3] == "train"):
+            modelStack.fit(X_train_mid,
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=(X_test_mid, y_test))
+            modelStack.save_weights('models/stacked-rnn.h5')
+        else:
+            print('Load model...')
+            modelStack.load_weights('models/stacked-rnn.h5')
+
+
         # In[33]:
     
         score, acc = modelStack.evaluate(X_test_mid, y_test,
@@ -680,8 +692,13 @@ else:
         print('Test score:', score)
         print('Test accuracy:', acc)
     
-    
-    
+        pred = modelStack.predict(X_test_mid)
+        pred = pred.flatten()
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
+        bootstrap(y, pred)
+
+
     elif (sys.argv[1] == "mlp"):
         #
         #  RNN+MLP model
@@ -728,12 +745,16 @@ else:
     
     
         # In[32]:
-    
-        modelMLP.fit(X_train_mid,
-                   y_train,
-                   batch_size=batch_size,
-                   nb_epoch=nb_epoch,
-                   validation_data=(X_test_mid, y_test))
+        if (sys.argv[3] == "train"):
+            modelMLP.fit(X_train_mid,
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=(X_test_mid, y_test))
+            modelMLP.save_weights('models/mlp.h5')
+        else:
+            print('Load model...')
+            modelMLP.load_weights('models/mlp.h5')
     
     
         # In[33]:
@@ -742,6 +763,12 @@ else:
                                     batch_size=batch_size)
         print('Test score:', score)
         print('Test accuracy:', acc)
+
+        pred = modelMLP.predict(X_test_mid)
+        pred = pred.flatten()
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
+        bootstrap(y, pred)
     
     
     elif (sys.argv[1] == "weighting"):
@@ -789,12 +816,16 @@ else:
     
     
         # In[32]:
-    
-        modelRWeight.fit(X_train_mid,
-                   y_train_mid,
-                   batch_size=batch_size,
-                   nb_epoch=nb_epoch,
-                   validation_data=(X_test_mid, y_test_mid))
+        if (sys.argv[3] == "train"):
+            modelRWeight.fit(X_train_mid,
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=(X_test_mid, y_test))
+            modelRWeight.save_weights('models/rnn-rweights.h5')
+        else:
+            print('Load model...')
+            modelRWeight.load_weights('models/rnn-rweights.h5')
     
     
         # In[33]:
@@ -835,7 +866,7 @@ else:
     
     elif (sys.argv[1] == "pool"):
         #
-        #  RNN recency weighting with relu model
+        #  CNN with pooling
         # In[29]:
     
         batch_size = 32
@@ -844,14 +875,14 @@ else:
         averagePooling = GlobalAveragePooling1D()(cnnInput)
         dropout = Dropout(0.4)(averagePooling)
         top = Dense(1, activation='sigmoid')(dropout)
-        modelRelu = Model(input=[cnnInput], output=[top])
-        modelRelu.compile(loss='binary_crossentropy',
+        modelPool = Model(input=[cnnInput], output=[top])
+        modelPool.compile(loss='binary_crossentropy',
                           optimizer='adam',
                           metrics=['accuracy'])
     
         # In[30]:
     
-        modelRelu.summary()
+        modelPool.summary()
     
         # In[31]:
     
@@ -866,25 +897,35 @@ else:
             X_train_mid[i:(i + last_idx)] = X_train_chunk
     
         # In[32]:
-    
-        modelRelu.fit(X_train_mid,
-                      y_train,
-                      batch_size=batch_size,
-                      nb_epoch=nb_epoch,
-                      validation_data=(X_test_mid, y_test))
+        if (sys.argv[3] == "train"):
+            modelPool.fit(X_train_mid,
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=(X_test_mid, y_test))
+            modelPool.save_weights('models/cnn-pooling.h5')
+        else:
+            print('Load model...')
+            modelPool.load_weights('models/cnn-pooling.h5')
     
         
         # In[33]:
     
-        score, acc = modelRelu.evaluate(X_test_mid, y_test,
+        score, acc = modelPool.evaluate(X_test_mid, y_test,
                                         batch_size=batch_size)
         print('Test score:', score)
         print('Test accuracy:', acc)
+
+        pred = modelPool.predict(X_test_mid)
+        pred = pred.flatten()
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
+        bootstrap(y, pred)
     
     
     elif (sys.argv[1] == "relu"):
         #
-        #  RNN recency weighting with relu model
+        #  CNN recency weighting with relu model
         # In[29]:
     
         batch_size = 32
@@ -930,12 +971,16 @@ else:
     
                         
         # In[32]:
-    
-        modelRelu.fit([wtsTrain, X_train_mid],
-                    y_train,
-                    batch_size=batch_size,
-                    nb_epoch=nb_epoch,
-                    validation_data=([wtsTest, X_test_mid], y_test))
+        if (sys.argv[3] == "train"):
+            modelRelu.fit([wtsTrain, X_train_mid],
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=([wtsTest, X_test_mid], y_test))
+            modelRelu.save_weights('models/cnn-relu.h5')
+        else:
+            print('Load model...')
+            modelRelu.load_weights('models/cnn-relu.h5')
     
     
 
@@ -945,11 +990,17 @@ else:
                                     batch_size=batch_size)
         print('Test score:', score)
         print('Test accuracy:', acc)
-    
-    
+
+        pred = modelRelu.predict([wtsTest, X_test_mid])
+        pred = pred.flatten()
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
+        bootstrap(y, pred)
+
+
     elif (sys.argv[1] == "attention"):
         #
-        #  RNN recency weighting with relu model
+        #  CNN recency weighting with attention mechanism
         # In[29]:
     
         batch_size = 32
@@ -958,22 +1009,22 @@ else:
         #cnnTanh = TimeDistributed(Activation(activation='tanh'))(cnnInput)
         cnnTanh = TimeDistributed(Dense(1,activation='tanh'))(cnnInput)
         #attention = TimeDistributed(Dense(1, activation='softmax'))(cnnTanh)
-        attention = TimeDistributed(Dense(1, activation='softmax',bias=False))(cnnTanh)
+        attention = TimeDistributed(Dense(1, activation='softmax', bias=False))(cnnTanh)
         attention = TimeDistributed(RepeatVector(128))(attention)
         attention = Reshape((train_shp[1], 128))(attention)
         mergedInputs = merge([cnnInput, attention], mode='mul')
         averagePooling = GlobalAveragePooling1D()(mergedInputs)
         dropout = Dropout(0.4)(averagePooling)
         top = Dense(1, activation='sigmoid')(dropout)
-        modelRelu = Model(input=[cnnInput], output=[top])
-        modelRelu.compile(loss='binary_crossentropy',
+        modelAttention = Model(input=[cnnInput], output=[top])
+        modelAttention.compile(loss='binary_crossentropy',
                       optimizer='adam',
                       metrics=['accuracy'])
     
     
         # In[30]:
-    
-        modelRelu.summary()
+
+        modelAttention.summary()
     
         # In[31]:
     
@@ -988,20 +1039,28 @@ else:
             X_train_mid[i:(i + last_idx)] = X_train_chunk
     
         # In[32]:
-    
-        modelRelu.fit(X_train_mid,
-                    y_train,
-                    batch_size=batch_size,
-                    nb_epoch=nb_epoch,
-                    validation_data=(X_test_mid, y_test))
+        if (sys.argv[3] == "train"):
+            modelAttention.fit(X_train_mid,
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=(X_test_mid, y_test))
+            modelAttention.save_weights('models/cnn-attention.h5')
+        else:
+            print('Load model...')
+            modelAttention.load_weights('models/cnn-attention.h5')
     
     
         # In[33]:
     
-        score, acc = modelRelu.evaluate(X_test_mid, y_test,
+        score, acc = modelAttention.evaluate(X_test_mid, y_test,
                                     batch_size=batch_size)
         print('Test score:', score)
         print('Test accuracy:', acc)
 
-
+        pred = modelRelu.predict(X_test_mid)
+        pred = pred.flatten()
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
+        bootstrap(y, pred)
 
