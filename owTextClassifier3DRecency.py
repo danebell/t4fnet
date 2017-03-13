@@ -890,8 +890,8 @@ else:
         batch_size = 32
     
         recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
-        recentRelu = TimeDistributed(Dense(1, activation="relu"), name='relu')(recentInput)
-        #recentRelu = TimeDistributed(Dense(1, activation="softplus"))(recentInput)
+        #recentRelu = TimeDistributed(Dense(1, activation="relu"), name='relu')(recentInput)
+        recentRelu = TimeDistributed(Dense(1, activation="softplus"), name='softplus')(recentInput)
         recentNorm = TimeDistributed(Dense(1,activation='tanh'),name='tanh_norm')(recentRelu)
         repeatRelu = TimeDistributed(RepeatVector(128),name='repeat_vector')(recentNorm)
         reshapeRelu = Reshape((train_shp[1], 128),name='reshape')(repeatRelu)
@@ -955,7 +955,9 @@ else:
         batch_size = 32
     
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
-        cnnTanh = TimeDistributed(Dense(1,activation='softplus'))(cnnInput)
+        #cnnTanh = TimeDistributed(Activation(activation='tanh'))(cnnInput)
+        cnnTanh = TimeDistributed(Dense(1,activation='tanh'))(cnnInput)
+        #attention = TimeDistributed(Dense(1, activation='softmax'))(cnnTanh)
         attention = TimeDistributed(Dense(1, activation='softmax',bias=False))(cnnTanh)
         attention = TimeDistributed(RepeatVector(128))(attention)
         attention = Reshape((train_shp[1], 128))(attention)
