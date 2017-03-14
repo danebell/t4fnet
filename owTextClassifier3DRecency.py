@@ -18,13 +18,17 @@ import sys
 from keras.preprocessing import sequence
 from keras.utils import np_utils
 from keras.models import Sequential, load_model, Model
-from keras.layers import BatchNormalization
+from keras.layers import BatchNormalization, Lambda
 from keras.layers import Dense, Dropout, Activation, Embedding, TimeDistributed, Reshape, Input, merge, RepeatVector
 from keras.layers import LSTM, SimpleRNN, GRU, Bidirectional
 from keras.layers import Convolution1D, MaxPooling1D, Flatten, GlobalAveragePooling1D
 from keras.layers.core import K
 
 
+
+def GlobalSumPooling1D(x):
+    return K.sum(x,axis=1)
+            
 # In[21]:
 
 def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
@@ -367,10 +371,10 @@ y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
 X_train, y_train = shuffle_in_unison(X_train, y_train)
 X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-# X_train = X_train[:10]
-# y_train = y_train[:10]
-# X_test = X_test[:1]
-# y_test = y_test[:1]
+#X_train = X_train[:10]
+#y_train = y_train[:10]
+#X_test = X_test[:1]
+#y_test = y_test[:1]
 print(len(X_train), 'train sequences')
 print(len(X_test), 'test sequences')
 
@@ -1001,7 +1005,8 @@ else:
         reshapeRelu = Reshape((train_shp[1], 128),name='reshape')(repeatRelu)
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
         mergedInputs = merge([cnnInput, reshapeRelu], mode='mul')
-        averagePooling = GlobalAveragePooling1D(name='average')(mergedInputs)
+        #averagePooling = GlobalAveragePooling1D(name='average')(mergedInputs)
+        averagePooling = Lambda(GlobalSumPooling1D, output_shape=(128,))(mergedInputs)
         dropout = Dropout(0.4, name='dropout')(averagePooling)
         top = Dense(1, activation='sigmoid', name='top_sigmoid')(dropout)
         modelRelu = Model(input=[recentInput, cnnInput], output=[top])
@@ -1065,7 +1070,7 @@ else:
         #
         #  CNN recency weighting with attention mechanism
         # In[29]:
-    
+            
         batch_size = 32
     
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
@@ -1077,7 +1082,8 @@ else:
         attentionRepeat = TimeDistributed(RepeatVector(128))(attentionToSeq)
         attentionReshape = Reshape((train_shp[1], 128))(attentionRepeat)
         mergedInputs = merge([cnnInput, attentionReshape], mode='mul')
-        averagePooling = GlobalAveragePooling1D()(mergedInputs)
+        #averagePooling = GlobalAveragePooling1D()(mergedInputs)
+        averagePooling = Lambda(GlobalSumPooling1D, output_shape=(128,))(mergedInputs)
         dropout = Dropout(0.4)(averagePooling)
         top = Dense(1, activation='sigmoid')(dropout)
         modelAttention = Model(input=[cnnInput], output=[top])
