@@ -27,8 +27,12 @@ from keras.layers.core import K
 
 
 def GlobalSumPooling1D(x):
-    return K.sum(x,axis=1)
-            
+    return K.sum(x, axis=1)
+
+def GlobalMaskedAveragePooling1D(x):
+    not_masked = K.cast(K.any(x, axis=2), dtype="float32")
+    not_masked = K.sum(not_masked, axis=1)
+    return K.sum(x, axis=1) / not_masked
 # In[21]:
 
 def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
@@ -371,10 +375,10 @@ y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
 X_train, y_train = shuffle_in_unison(X_train, y_train)
 X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-#X_train = X_train[:10]
-#y_train = y_train[:10]
-#X_test = X_test[:1]
-#y_test = y_test[:1]
+# X_train = X_train[:10]
+# y_train = y_train[:10]
+# X_test = X_test[:1]
+# y_test = y_test[:1]
 print(len(X_train), 'train sequences')
 print(len(X_test), 'test sequences')
 
@@ -996,17 +1000,18 @@ else:
         # In[29]:
     
         batch_size = 32
-    
+
         recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
-        recentRelu = TimeDistributed(Dense(1, activation="relu"), name='relu')(recentInput)
-        #recentRelu = TimeDistributed(Dense(1, activation="softplus"), name='softplus')(recentInput)
-        recentNorm = TimeDistributed(Dense(1,activation='tanh'),name='tanh_norm')(recentRelu)
-        repeatRelu = TimeDistributed(RepeatVector(128),name='repeat_vector')(recentNorm)
-        reshapeRelu = Reshape((train_shp[1], 128),name='reshape')(repeatRelu)
+        # recentRelu = TimeDistributed(Dense(1, activation="relu"), name='relu')(recentInput)
+        # #recentRelu = TimeDistributed(Dense(1, activation="softplus"), name='softplus')(recentInput)
+        # recentNorm = TimeDistributed(Dense(1,activation='tanh'),name='tanh_norm')(recentRelu)
+        repeatRelu = TimeDistributed(RepeatVector(128), name='repeat_vector')(recentInput)
+        reshapeRelu = Reshape((train_shp[1], 128), name='reshape')(repeatRelu)
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
         mergedInputs = merge([cnnInput, reshapeRelu], mode='mul')
         #averagePooling = GlobalAveragePooling1D(name='average')(mergedInputs)
-        averagePooling = Lambda(GlobalSumPooling1D, output_shape=(128,))(mergedInputs)
+        averagePooling = Lambda(GlobalMaskedAveragePooling1D, output_shape=(128,))(mergedInputs)
+        #averagePooling = Lambda(GlobalSumPooling1D, output_shape=(128,))(mergedInputs)
         dropout = Dropout(0.4, name='dropout')(averagePooling)
         top = Dense(1, activation='sigmoid', name='top_sigmoid')(dropout)
         modelRelu = Model(input=[recentInput, cnnInput], output=[top])
@@ -1018,13 +1023,15 @@ else:
     
         modelRelu.summary()
     
-        wts = np.linspace(0.1, 1, train_shp[1])
+        #wts = np.linspace(0.1, 1, train_shp[1])
+        wts = np.zeros(train_shp[1])
+        wts[1800:] = 1.
         wtsTrain = np.tile(wts,(train_shp[0],1))
         wtsTrain = np.reshape(wtsTrain, (train_shp[0], train_shp[1], 1))
     
         wtsTest = np.tile(wts, (test_shp[0], 1))
         wtsTest = np.reshape(wtsTest, (test_shp[0], train_shp[1], 1))
-        
+
         # In[31]:
     
         chunk = 256
