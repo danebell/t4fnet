@@ -32,7 +32,9 @@ def GlobalSumPooling1D(x):
 def GlobalMaskedAveragePooling1D(x):
     not_masked = K.cast(K.any(x, axis=2), dtype="float32")
     not_masked = K.sum(not_masked, axis=1)
+    not_masked = K.reshape(not_masked, (K.shape(not_masked)[0], 1))
     return K.sum(x, axis=1) / not_masked
+
 # In[21]:
 
 def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
@@ -1043,7 +1045,7 @@ else:
             X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
             X_train_chunk = np.fliplr(X_train_chunk)
             X_train_mid[i:(i + last_idx)] = X_train_chunk
-    
+
                         
         # In[32]:
         if (sys.argv[3] == "train"):
@@ -1056,11 +1058,11 @@ else:
         else:
             print('Load model...')
             modelRelu.load_weights('models/cnn-relu.h5')
-    
-    
+
+
 
         # In[33]:
-    
+
         score, acc = modelRelu.evaluate([wtsTest, X_test_mid], y_test,
                                     batch_size=batch_size)
         print('Test score:', score)
