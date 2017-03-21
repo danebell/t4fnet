@@ -358,6 +358,8 @@ model1.compile(loss='binary_crossentropy',
                optimizer='adam',
                metrics=['accuracy'])
 
+fembs = K.function([model1.layers[0].input],
+           [model1.layers[4].output])
 
 # In[14]:
 
@@ -369,17 +371,15 @@ cembsf = open('cnn_embeddings.txt','w')
 labelf = open('labels.txt','w')
 
 
-cnnembs = model1.predict(X_train_shuff)
-
+cnnembs = fembs([X_train_flat])[0]
 for i in range(0, len(cnnembs)):
     cembsf.write('\t'.join(str(n) for n in cnnembs[i]) + '\n')
     labelf.write(str(y_train_shuff[i]) + '\n')
 
-cnnembs = model1.predict(X_test_flat)
-
+cnnembs = fembs([X_test_flat])[0]
 for i in range(0, len(cnnembs)):
     cembsf.write('\t'.join(str(n) for n in cnnembs[i]) + '\n')
-    labelf.write(str(y_test_flat) + '\n')
+    labelf.write(str(2) + '\n')
 
 
 cembsf.close()
