@@ -24,6 +24,17 @@ from keras.layers import Convolution1D, MaxPooling1D, Flatten, GlobalAveragePool
 from keras.layers.core import K
 
 
+def GlobalSumPooling1D(x):
+    return K.sum(x, axis=1)
+
+
+def GlobalMaskedAveragePooling1D(x):
+    not_masked = K.cast(K.any(x, axis=2), dtype="float32")
+    not_masked = K.sum(not_masked, axis=1)
+    not_masked = K.reshape(not_masked, (K.shape(not_masked)[0], 1))
+    return K.sum(x, axis=1) / not_masked
+
+
 # In[21]:
 
 def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
@@ -37,21 +48,22 @@ def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
         mt = maxtweets
     else:
         mt = find_most_tweets(sequences)
-    #print('maximum # tweets: %i' % mt)
-    
+    # print('maximum # tweets: %i' % mt)
+
     if maxlen is not None:
         ml = maxlen
     else:
         ml = find_longest(sequences)
-    #print('maximum tweet length: %i' % ml)
-        
+    # print('maximum tweet length: %i' % ml)
+
     x = (np.ones((nb_samples, mt, ml)) * value).astype(dtype)
-    #print('x shape: ', x.shape)
+    # print('x shape: ', x.shape)
     for idx, s in enumerate(sequences):
         if len(s) == 0:
-            continue # no tweets
-        x[idx, :min(mt,len(s))] = sequence.pad_sequences(s[:mt], ml, dtype, padding, truncating, value)
+            continue  # no tweets
+        x[idx, :min(mt, len(s))] = sequence.pad_sequences(s[:mt], ml, dtype, padding, truncating, value)
     return x
+
 
 def find_most_tweets(x):
     currmax = 0
@@ -60,6 +72,7 @@ def find_most_tweets(x):
         if currlen > currmax:
             currmax = currlen
     return currmax
+
 
 def find_longest(x):
     currmax = 0
@@ -70,14 +83,18 @@ def find_longest(x):
                 currmax = currlen
     return currmax
 
+
 def cap_words(x, nb_words, oov=2):
     return [[[oov if w >= nb_words else w for w in z] for z in y] for y in x]
+
 
 def skip_n(x, n, oov=2):
     return [[[oov if w < n else w for w in z] for z in y] for y in x]
 
+
 def cap_length(x, maxlen):
     return [[z[:maxlen] for z in y] for y in x]
+
 
 def push_indices(x, start, index_from):
     if start is not None:
@@ -87,9 +104,9 @@ def push_indices(x, start, index_from):
     else:
         return x
 
+
 def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
-              maxlen=None, seed=113,
-              start=1, oov=2, index_from=3):
+              maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
         path: where the data is stored (in '.')
@@ -110,66 +127,67 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     words that were present in the training set but are not included
     because they're not making the `nb_words` cut here.
     Words that were not seen in the training set but are in the test set
-    have simply been skipped.
+    have simply been skipped. See preprocessText3D
+
+    Adapted from keras.datasets.imdb.py by François Chollet
     '''
-    
+
     if path.endswith(".gz"):
         f = gzip.open(path, 'rb')
     else:
         f = open(path, 'rb')
 
-    (train_X, train_y) = pkl.load(f)
-    (test_X, test_y) = pkl.load(f)
+    (x_pos, y_pos) = pkl.load(f)
+    (x_neg, y_neg) = pkl.load(f)
 
     f.close()
 
     # randomize datum order
     np.random.seed(seed)
-    np.random.shuffle(train_X)
+    np.random.shuffle(x_pos)
     np.random.seed(seed)
-    np.random.shuffle(train_y)
+    np.random.shuffle(y_pos)
 
     np.random.seed(seed * 2)
-    np.random.shuffle(test_X)
+    np.random.shuffle(x_neg)
     np.random.seed(seed * 2)
-    np.random.shuffle(test_y)
+    np.random.shuffle(y_neg)
 
     # keep maxlen words of each tweet
     if maxlen is not None:
-        train_X = cap_length(train_X, maxlen)
-        test_X = cap_length(test_X, maxlen)
+        x_pos = cap_length(x_pos, maxlen)
+        x_neg = cap_length(x_neg, maxlen)
 
     # cut off infrequent words to vocab of size nb_words
     if nb_words is not None:
-        train_X = cap_words(train_X, nb_words, oov)
-        test_X = cap_words(test_X, nb_words, oov)
+        x_pos = cap_words(x_pos, nb_words, oov)
+        x_neg = cap_words(x_neg, nb_words, oov)
 
     # cut off most frequent skip_top words
     if skip_top > 0:
-        train_X = skip_n(train_X, skip_top, oov)
-        test_X = skip_n(test_X, skip_top, oov)
+        x_pos = skip_n(x_pos, skip_top, oov)
+        x_neg = skip_n(x_neg, skip_top, oov)
 
     # prepend each sequence with start and raise indices by index_from
-    train_X = push_indices(train_X, start, index_from)
-    test_X = push_indices(test_X, start, index_from)
-    
-    train_X = np.array(train_X)
-    train_y = np.array(train_y)
+    x_pos = push_indices(x_pos, start, index_from)
+    x_neg = push_indices(x_neg, start, index_from)
 
-    test_X = np.array(test_X)
-    test_y = np.array(test_y)
-    
-    return (train_X, train_y), (test_X, test_y)
+    x_pos = np.array(x_pos)
+    y_pos = np.array(y_pos)
+
+    x_neg = np.array(x_neg)
+    y_neg = np.array(y_neg)
+
+    return (x_pos, y_pos), (x_neg, y_neg)
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    vocab='ow3d.dict.pkl', 
+                    vocab='ow3d.dict.pkl',
                     w2v='food_vectors_clean.txt'):
-
     f = open(vocab, 'rb')
     word_index = pkl.load(f)
     f.close()
-    
+
     if nb_words is not None:
         max_features = min(nb_words, len(word_index))
     else:
@@ -190,33 +208,34 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
             print(".", end="")
         if i % 100000 == 0:
             print("")
-            
+
         i = i + 1
 
     f.close()
     print("")
     print('Found %s word vectors.' % len(embeddings_index))
-    
-    embedding_matrix = np.zeros((max_features+index_from, emb_dim))
+
+    embedding_matrix = np.zeros((max_features + index_from, emb_dim))
     for word, i in word_index.items():
         if i < max_features:
             embedding_vector = embeddings_index.get(word)
             if embedding_vector is not None:
                 # words not found in embedding index will be all-zeros.
-                embedding_matrix[i+index_from] = embedding_vector
+                embedding_matrix[i + index_from] = embedding_vector
 
     return embedding_matrix
+
 
 def shuffle_in_unison(a, b):
     assert len(a) == len(b)
     shuffled_a = np.empty(a.shape, dtype=a.dtype)
     shuffled_b = np.empty(b.shape, dtype=b.dtype)
-    np.random.seed(149)
     permutation = np.random.permutation(len(a))
     for old_index, new_index in enumerate(permutation):
         shuffled_a[new_index] = a[old_index]
         shuffled_b[new_index] = b[old_index]
     return shuffled_a, shuffled_b
+
 
 def bootstrap(gold, pred, reps=100000):
     '''
@@ -225,10 +244,10 @@ def bootstrap(gold, pred, reps=100000):
         pred: list of predicted integer labels
         reps: how many repetitions to do (more=more accurate)
 
-    Run a bootstrap significance test. Returns prediction 
-    accuracy (out of 1), the accuracy of the baseline of 
-    choosing the most common label in the gold labels, and 
-    the p-value (the probability that you would do this much 
+    Run a bootstrap significance test. Returns prediction
+    accuracy (out of 1), the accuracy of the baseline of
+    choosing the most common label in the gold labels, and
+    the p-value (the probability that you would do this much
     better than the baseline by chance).
     '''
     accts = len(gold)
@@ -255,8 +274,78 @@ def bootstrap(gold, pred, reps=100000):
         stars = '***'
     else:
         stars = ''
+
     acc = np.mean(agr)
+    tp = 0
+    tn = 0
+    fn = 0
+    fp = 0
+    for i in range(len(gold)):
+        if gold[i] == 1 and pred[i] == 1:
+            tp = tp + 1
+        elif gold[i] == 1 and pred[i] != 1:
+            fn = fn + 1
+        elif gold[i] != 1 and pred[i] == 1:
+            fp = fp + 1
+        else:
+            tn = tn + 1
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+
+    f1s = []
+    tps = []
+    tns = []
+    fns = []
+    fps = []
+    for lbl in (hist.keys()):
+        if lbl == -1:
+            continue
+        tp = 0
+        tn = 0
+        fn = 0
+        fp = 0
+        for i in range(len(gold)):
+            if gold[i] == lbl and pred[i] == lbl:
+                tp = tp + 1
+            elif gold[i] == lbl and pred[i] != lbl:
+                fn = fn + 1
+            elif gold[i] != lbl and pred[i] == lbl:
+                fp = fp + 1
+            else:
+                tn = tn + 1
+
+        tps.append(tp)
+        tns.append(tn)
+        fns.append(fn)
+        fps.append(fp)
+        if (tp + fp == 0):
+            prec = 0
+        else:
+            prec = tp / (tp + fp)
+        if (tp + fn == 0):
+            rec = 0
+        else:
+            rec = tp / (tp + fn)
+        if (prec + rec == 0):
+            f1s.append(0)
+        else:
+            f1s.append(2 * prec * rec / (prec + rec))
+
+    f1s = np.array(f1s)
+    tps = np.array(tps)
+    tns = np.array(tns)
+    fns = np.array(fns)
+    fps = np.array(fps)
+    prec = tps.sum() / (tps.sum() + fps.sum())
+    rec = tps.sum() / (tps.sum() + fns.sum())
+    microf1 = 2 * prec * rec / (prec + rec)
+    macrof1 = f1s.sum() / len(f1s)
+
     print('accuracy = %.4f' % acc)
+    print('precision = %.4f' % precision)
+    print('recall = %.4f' % recall)
+    print('microF1 = %.4f' % microf1)
+    print('macroF1 = %.4f' % macrof1)
     print('baseline = %.4f' % baseline)
     print('p = %.6f%s' % (p, stars))
     return (acc, baseline, p)
@@ -358,8 +447,7 @@ model1.compile(loss='binary_crossentropy',
                optimizer='adam',
                metrics=['accuracy'])
 
-fembs = K.function([model1.layers[0].input],
-           [model1.layers[4].output])
+fembs = K.function([model1.layers[0].input], [model1.layers[4].output])
 
 # In[14]:
 
