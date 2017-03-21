@@ -1072,7 +1072,7 @@ else:
         bootstrap(y, pred)
 
 
-    elif (sys.argv[1] == "rnn-relu"):
+    elif (sys.argv[1] == "rnnrelu"):
         #
         #  CNN recency weighting with relu model
         # In[29]:
@@ -1081,7 +1081,7 @@ else:
 
         recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
         recentNorm = TimeDistributed(Dense(1, activation='tanh'), name='tanh_norm')(recentInput)
-        recentSelect = TimeDistributed(Dense(1, activation='relu'), name='tanh_norm')(recentNorm)
+        recentSelect = TimeDistributed(Dense(1, activation='relu'), name='relu_select')(recentNorm)
         recentRepeat = TimeDistributed(RepeatVector(128), name='repeat_vector')(recentSelect)
         recentReshape = Reshape((train_shp[1], 128), name='reshape')(recentRepeat)
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
