@@ -274,10 +274,11 @@ maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
 (X_train, y_train), (X_test, y_test) = load_data(nb_words=max_features, maxlen=maxlen)
-X_train = X_train[:500]
-y_train = y_train[:500]
-X_test = X_test[:10]
-y_test = y_test[:10]
+
+# X_train = X_train[:10]
+# y_train = y_train[:10]
+# X_test = X_test[:5]
+# y_test = y_test[:5]
 print(len(X_train), 'train sequences')
 print(len(X_test), 'test sequences')
 
@@ -333,33 +334,29 @@ batch_size = 256 # how many tweets to train at a time
 # Pretrain cnn
 #
 
-
-# print('Build first model (tweet-level)...')
-# model1 = Sequential()
-# model1.add(Embedding(max_features + 3,
-#                      emb_dim,
-#                      input_length=maxlen,
-#                      weights=[embeddings],
-#                     name="emb"))#,
-#                      #mask_zero=True))
-# model1.add(Convolution1D(nb_filter=nb_filter,
-#                          filter_length=filter_length,
-#                          border_mode='valid',
-#                          activation='relu',
-#                          subsample_length=1,
-#                          name="conv1d"))
-# model1.add(MaxPooling1D(pool_length=pool_length))
-# model1.add(Flatten())
-# model1.add(Dense(128, name="dense1"))
-# model1.add(Activation('relu'))
-# model1.add(Dropout(0.4, name="dense2"))
-# model1.add(Dense(1, name="dense3"))
-# model1.add(Activation('sigmoid'))
-# model1.compile(loss='binary_crossentropy',
-#                optimizer='adam',
-#                metrics=['accuracy'])
-
-
+model1 = Sequential()
+model1.add(Embedding(max_features + 3,
+                     emb_dim,
+                     input_length=maxlen,
+                     weights=[embeddings],
+                    name="emb"))#,
+                     #mask_zero=True))
+model1.add(Convolution1D(nb_filter=nb_filter,
+                         filter_length=filter_length,
+                         border_mode='valid',
+                         activation='relu',
+                         subsample_length=1,
+                         name="conv1d"))
+model1.add(MaxPooling1D(pool_length=pool_length))
+model1.add(Flatten())
+model1.add(Dense(128, name="dense1"))
+model1.add(Activation('relu'))
+model1.add(Dropout(0.4, name="dense2"))
+model1.add(Dense(1, name="dense3"))
+model1.add(Activation('sigmoid'))
+model1.compile(loss='binary_crossentropy',
+               optimizer='adam',
+               metrics=['accuracy'])
 
 
 # In[14]:
@@ -368,40 +365,23 @@ model1 = load_model('models/tweet_classifier.h5')
 
 model1.summary()
 
-
-intermediate = Sequential()
-intermediate.add(Embedding(max_features + 3,
-                     emb_dim,
-                     input_length=maxlen,
-                     weights=[embeddings]
-                    ))#,
-                     #mask_zero=True))
-intermediate.add(Convolution1D(nb_filter=nb_filter,
-                         filter_length=filter_length,
-                         border_mode='valid',
-                         activation='relu',
-                         subsample_length=1))
-intermediate.add(MaxPooling1D(pool_length=pool_length))
-intermediate.add(Flatten())
-intermediate.add(Dense(128))
-intermediate.add(Activation('relu'))
-
-for l in range(len(intermediate.layers)):
-    intermediate.layers[l].set_weights(model1.layers[l].get_weights())
-    intermediate.layers[l]
-
-intermediate.compile(loss='binary_crossentropy',
-                     optimizer='adam',
-                     metrics=['accuracy'])
-
-cnnembs = intermediate.predict(X_train_shuff)
-
 cembsf = open('cnn_embeddings.txt','w')
 labelf = open('labels.txt','w')
+
+
+cnnembs = model1.predict(X_train_shuff)
+
 for i in range(0, len(cnnembs)):
     cembsf.write('\t'.join(str(n) for n in cnnembs[i]) + '\n')
     labelf.write(str(y_train_shuff[i]) + '\n')
+
+cnnembs = model1.predict(X_test_flat)
+
+for i in range(0, len(cnnembs)):
+    cembsf.write('\t'.join(str(n) for n in cnnembs[i]) + '\n')
+    labelf.write(str(y_test_flat) + '\n')
+
+
 cembsf.close()
 labelf.close()
 
-# In[15]:
