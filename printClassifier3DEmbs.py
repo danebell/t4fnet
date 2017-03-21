@@ -361,7 +361,7 @@ model1.compile(loss='binary_crossentropy',
 
 # In[14]:
 
-model1 = load_model('models/tweet_classifier.h5')
+model1.load_weights('models/tweet_classifier.h5')
 
 model1.summary()
 
