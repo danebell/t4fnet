@@ -362,7 +362,28 @@ max_features = 20000
 maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
-(X_train, y_train), (X_test, y_test) = load_data(nb_words=max_features, maxlen=maxlen)
+# These come out shuffled
+(x_pos, y_pos), (x_neg, y_neg) = load_data(nb_words=max_features, maxlen=maxlen)
+
+# length of the test partition
+pos_len = int(len(y_pos)/10.0)
+neg_len = int(len(y_neg)/10.0)
+
+# This convoluted way of making partitions assures equal pos and neg labels per partition
+pos_test_ids = list(range(pos_len))
+neg_test_ids = list(range(neg_len))
+
+pos_train_ids = list(range(pos_len, len(y_pos)))
+neg_train_ids = list(range(neg_len, len(y_neg)))
+
+X_train = np.append(x_pos[pos_train_ids], x_neg[neg_train_ids])
+y_train = np.append(y_pos[pos_train_ids], y_neg[neg_train_ids])
+
+X_test = np.append(x_pos[pos_test_ids], x_neg[neg_test_ids])
+y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
+
+X_train, y_train = shuffle_in_unison(X_train, y_train)
+X_test, y_test = shuffle_in_unison(X_test, y_test)
 
 # X_train = X_train[:10]
 # y_train = y_train[:10]
