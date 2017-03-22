@@ -468,24 +468,54 @@ model1.compile(loss='binary_crossentropy',
                optimizer='adam',
                metrics=['accuracy'])
 
-fembs = K.function([model1.layers[0].input], [model1.layers[4].output])
+
+model1.load_weights('models/tweet_classifier.h5')
+model1.summary()
+
+
+intermediate = Sequential()
+intermediate.add(Embedding(max_features + 3,
+                           emb_dim,
+                           input_length=maxlen,
+                           weights=[embeddings]
+                           ))  # ,
+                            # mask_zero=True))
+intermediate.add(Convolution1D(nb_filter=nb_filter,
+                               filter_length=filter_length,
+                               border_mode='valid',
+                               activation='relu',
+                               subsample_length=1))
+intermediate.add(MaxPooling1D(pool_length=pool_length))
+intermediate.add(Flatten())
+intermediate.add(Dense(128))
+intermediate.add(Activation('relu'))
+
+for l in range(len(intermediate.layers)):
+    intermediate.layers[l].set_weights(model1.layers[l].get_weights())
+    intermediate.layers[l]
+
+intermediate.compile(loss='binary_crossentropy',
+                     optimizer='adam',
+                     metrics=['accuracy'])
+
+# In[26]:
+
+intermediate.summary()
 
 # In[14]:
 
-model1.load_weights('models/tweet_classifier.h5')
 
-model1.summary()
 
 cembsf = open('cnn_embeddings.txt','w')
 labelf = open('labels.txt','w')
 
 
-cnnembs = fembs([X_train_flat])[0]
+cnnembs = intermediate.predict([X_train_flat])
 for i in range(0, len(cnnembs)):
     cembsf.write('\t'.join(str(n) for n in cnnembs[i]) + '\n')
-    labelf.write(str(y_train_shuff[i]) + '\n')
+    labelf.write(str(y_train_flat[i]) + '\n')
 
-cnnembs = fembs([X_test_flat])[0]
+cnnembs = intermediate.predict([X_test_flat])
 for i in range(0, len(cnnembs)):
     cembsf.write('\t'.join(str(n) for n in cnnembs[i]) + '\n')
     labelf.write(str(2) + '\n')
