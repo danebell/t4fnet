@@ -995,7 +995,66 @@ else:
         y = y_test.flatten()
         bootstrap(y, pred)
     
+        
+    elif (sys.argv[1] == "sigpool"):
+        #
+        #  CNN with pooling after sigmoid
+        # In[29]:
     
+        batch_size = 32
+    
+        cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
+        dropout = Dropout(0.4)(cnnInput)
+        sigmoid = TimeDistributed(Dense(1, activation='sigmoid'))(dropout)
+        top = GlobalAveragePooling1D()(sigmoid)
+        modelPool = Model(input=[cnnInput], output=[top])
+        modelPool.compile(loss='binary_crossentropy',
+                          optimizer='adam',
+                          metrics=['accuracy'])
+    
+        # In[30]:
+    
+        modelPool.summary()
+    
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets: (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+    
+        # In[32]:
+        if (sys.argv[3] == "train"):
+            modelPool.fit(X_train_mid,
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=(X_test_mid, y_test))
+            modelPool.save_weights('models/cnn-pooling.h5')
+        else:
+            print('Load model...')
+            modelPool.load_weights('models/cnn-pooling.h5')
+    
+        
+        # In[33]:
+    
+        score, acc = modelPool.evaluate(X_test_mid, y_test,
+                                        batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+
+        pred = modelPool.predict(X_test_mid)
+        pred = pred.flatten()
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
+        bootstrap(y, pred)
+      
+        
     elif (sys.argv[1] == "relu"):
         #
         #  CNN recency weighting with relu model
