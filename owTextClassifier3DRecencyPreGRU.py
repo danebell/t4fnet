@@ -552,7 +552,8 @@ else:
     
     
     # In[28]:
-    
+
+    K.set_learning_phase(0)
     X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
     X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
     X_test_mid = np.fliplr(X_test_mid)
