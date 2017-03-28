@@ -1080,7 +1080,7 @@ else:
     
         modelRelu.summary()
     
-        wts = np.linspace(0.1, 1, train_shp[1])
+        wts = np.linspace(1, 0.1, train_shp[1])
         wtsTrain = np.tile(wts,(train_shp[0],1))
         wtsTrain = np.reshape(wtsTrain, (train_shp[0], train_shp[1], 1))
     
