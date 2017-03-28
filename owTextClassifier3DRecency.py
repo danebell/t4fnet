@@ -34,6 +34,7 @@ def GlobalMaskedAveragePooling1D(x):
     not_masked = K.sum(not_masked, axis=1)
     not_masked = K.reshape(not_masked, (K.shape(not_masked)[0], 1))
     return K.sum(x, axis=1) / not_masked
+    
 
 # In[21]:
 
@@ -995,7 +996,7 @@ else:
         y = y_test.flatten()
         bootstrap(y, pred)
     
-        
+
     elif (sys.argv[1] == "sigpool"):
         #
         #  CNN with pooling after sigmoid
@@ -1054,6 +1055,78 @@ else:
         y = y_test.flatten()
         bootstrap(y, pred)
       
+        
+    elif (sys.argv[1] == "poolrecency"):
+        #
+        #  CNN recency weighting with relu model
+        # In[29]:
+    
+        batch_size = 32
+
+        recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
+        recentRepeat = TimeDistributed(RepeatVector(128), name='repeat_vector')(recentInput)
+        recentReshape = Reshape((train_shp[1], 128), name='reshape')(recentRepeat)
+        cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
+        mergedInputs = merge([cnnInput, recentReshape], mode='mul')
+        sumPooling = Lambda(GlobalSumPooling1D, output_shape=(128,))(mergedInputs)
+        dropout = Dropout(0.4, name='dropout')(sumPooling)
+        top = Dense(1, activation='sigmoid', name='top_sigmoid')(dropout)
+        modelRelu = Model(input=[recentInput, cnnInput], output=[top])
+        modelRelu.compile(loss='binary_crossentropy',
+                      optimizer='adam',
+                      metrics=['accuracy'])
+    
+        # In[30]:
+    
+        modelRelu.summary()
+    
+        wts = np.linspace(0.1, 1, train_shp[1])
+        wtsTrain = np.tile(wts,(train_shp[0],1))
+        wtsTrain = np.reshape(wtsTrain, (train_shp[0], train_shp[1], 1))
+    
+        wtsTest = np.tile(wts, (test_shp[0], 1))
+        wtsTest = np.reshape(wtsTest, (test_shp[0], train_shp[1], 1))
+
+        # In[31]:
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+
+                        
+        # In[32]:
+        if (sys.argv[3] == "train"):
+            modelRelu.fit([wtsTrain, X_train_mid],
+                          y_train,
+                          batch_size=batch_size,
+                          nb_epoch=nb_epoch,
+                          validation_data=([wtsTest, X_test_mid], y_test))
+            modelRelu.save_weights('models/cnn-relu.h5')
+        else:
+            print('Load model...')
+            modelRelu.load_weights('models/cnn-relu.h5')
+
+
+
+        # In[33]:
+
+        score, acc = modelRelu.evaluate([wtsTest, X_test_mid], y_test,
+                                    batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+
+        pred = modelRelu.predict([wtsTest, X_test_mid])
+        pred = pred.flatten()
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
+        bootstrap(y, pred)
+        
         
     elif (sys.argv[1] == "relu"):
         #

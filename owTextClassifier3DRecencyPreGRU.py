@@ -469,11 +469,11 @@ if (sys.argv[2] == "pre"):
     print('Train...')
     model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
                validation_data=(X_test_shuff, y_test_shuff))
-    model1.save_weights('models/tweet_classifier.h5')
+    model1.save_weights('models/tweet_classifier_gru.h5')
 
 else:
     print('Load model...')
-    model1.load_weights('models/tweet_classifier.h5')
+    model1.load_weights('models/tweet_classifier_gru.h5')
 
 
 if (sys.argv[1] == "gru"):
