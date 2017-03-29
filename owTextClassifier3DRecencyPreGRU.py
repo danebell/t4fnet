@@ -446,8 +446,9 @@ model1.add(Embedding(max_features + 3,
                     name="emb"))#,
                      #mask_zero=True))
 model1.add(GRU(128,
-               dropout_W=0.2,
-               dropout_U=0.2))
+               #dropout_W=0.2,
+               #dropout_U=0.2
+               ))
 model1.add(Dense(128, name="dense1"))
 model1.add(Activation('relu'))
 model1.add(Dropout(0.4, name="dense2"))
@@ -532,8 +533,9 @@ else:
                         ))#, 
                          #mask_zero=True))
     intermediate.add(GRU(128,
-                         dropout_W=0.2,
-                         dropout_U=0.2))
+                         #dropout_W=0.2,
+                         #dropout_U=0.2
+                         ))
     intermediate.add(Dense(128))
     intermediate.add(Activation('relu'))
     
@@ -553,7 +555,7 @@ else:
     
     # In[28]:
 
-    K.set_learning_phase(0)
+    #K.set_learning_phase(0)
     X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
     X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
     X_test_mid = np.fliplr(X_test_mid)
