@@ -1257,10 +1257,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/cnn-relu.h5')
+            modelRelu.save_weights('models/cnn-sigrelu.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/cnn-relu.h5')
+            modelRelu.load_weights('models/cnn-sigrelu.h5')
 
 
 
