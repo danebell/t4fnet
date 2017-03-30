@@ -378,10 +378,10 @@ y_test = np.append(y_pos[pos_test_ids], y_neg[neg_test_ids])
 X_train, y_train = shuffle_in_unison(X_train, y_train)
 X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-# X_train = X_train[:10]
-# y_train = y_train[:10]
-# X_test = X_test[:1]
-# y_test = y_test[:1]
+#X_train = X_train[:10]
+#y_train = y_train[:10]
+#X_test = X_test[:1]
+#y_test = y_test[:1]
 print(len(X_train), 'train sequences')
 print(len(X_test), 'test sequences')
 
@@ -1202,7 +1202,7 @@ else:
         bootstrap(y, pred)
 
 
-   elif (sys.argv[1] == "sigrelu"):
+    elif (sys.argv[1] == "sigrelu"):
         #
         #  CNN recency weighting with relu model
         # In[29]:
@@ -1212,20 +1212,17 @@ else:
         recentInput = Input(shape=(train_shp[1], 1), dtype='float32', name='recent_input')
         recentNorm = TimeDistributed(Dense(1,activation='tanh'),name='tanh_norm')(recentInput)
         recentSelect = TimeDistributed(Dense(1, activation='relu'), name='relu_select')(recentNorm)
-        #recentRepeat = TimeDistributed(RepeatVector(128), name='repeat_vector')(recentSelect)
-        #recentReshape = Reshape((train_shp[1], 128), name='reshape')(recentRepeat)
         cnnInput = Input(shape=(train_shp[1], 128), dtype='float32', name='cnn_input')
         dropout = Dropout(0.4)(cnnInput)
         sigmoid = TimeDistributed(Dense(1, activation='sigmoid'))(dropout)
         mergedInputs = merge([sigmoid, recentSelect], mode='mul')
-        sumPooling = Lambda(GlobalSumPooling1D, output_shape=(128,))(mergedInputs)
-        dropout = Dropout(0.4, name='dropout')(sumPooling)
-        top = Dense(1, activation='sigmoid', name='top_sigmoid')(dropout)
-        modelRelu = Model(input=[recentInput, cnnInput], output=[top])
+        sumPooling = Lambda(GlobalSumPooling1D, output_shape=(1,))(mergedInputs)
+        modelRelu = Model(input=[recentInput, cnnInput], output=[sumPooling])
         modelRelu.compile(loss='binary_crossentropy',
                       optimizer='adam',
                       metrics=['accuracy'])
-    
+
+            
         # In[30]:
     
         modelRelu.summary()
