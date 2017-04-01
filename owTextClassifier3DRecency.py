@@ -133,7 +133,7 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
 
     ((x_pos, i_pos), y_pos) = pkl.load(f)
     ((x_neg, i_neg), y_neg) = pkl.load(f)
-
+    
     f.close()
 
     # randomize datum order
@@ -231,7 +231,7 @@ def load_folds(file):
     folds = list(list() for i in range(10))
     f = open(file, 'r')
     for line in f:
-        (fold, accountID, ow) = line.split(',')
+        (fold, accountID, ow) = line.rstrip().split(',')
         folds[int(fold)].append((accountID, ow))
     f.close()
     return folds
@@ -363,6 +363,7 @@ def bootstrap(gold, pred, reps=100000):
 
 def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv):
     (x_pos, y_pos, i_pos), (x_neg, y_neg, i_neg) = pos, neg
+
     if optcv != 'nocv':
         folds = load_folds(optcv)
         for i in range(0, len(folds)):
@@ -372,22 +373,22 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv):
             y_test = list()
             for user in folds[i]:
                 if user[1] == "Overweight":
-                    position = i_pos.index(user[0])
+                    position = np.where(i_pos == user[0])[0][0]
                     X_test.append(x_pos[position])
                     y_test.append(y_pos[position])
                 else:
-                    position = i_neg.index(user[0])
+                    position = np.where(i_neg == user[0])[0][0]
                     X_test.append(x_neg[position])
                     y_test.append(y_neg[position])
             for j in range(0, len(folds)):
                 if i != j:
                     for user in folds[j]:
                         if user[1] == "Overweight":
-                            position = i_pos.index(user[0])
+                            position = np.where(i_pos == user[0])[0][0]
                             X_train.append(x_pos[position])
                             y_train.append(y_pos[position])
                         else:
-                            position = i_neg.index(user[0])
+                            position = np.where(i_neg == user[0])[0][0]
                             X_train.append(x_neg[position])
                             y_train.append(y_neg[position])
 
@@ -396,10 +397,10 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv):
             X_test = np.array(X_test)
             y_test = np.array(y_test)
 
-            X_train = X_train[:10]
-            y_train = y_train[:10]
-            X_test = X_test[:1]
-            y_test = y_test[:1]
+#            X_train = X_train[:10]
+#            y_train = y_train[:10]
+#            X_test = X_test[:10]
+#            y_test = y_test[:10]
             print(len(X_train), 'train sequences')
             print(len(X_test), 'test sequences')
 
@@ -458,10 +459,10 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv):
         X_train, y_train = shuffle_in_unison(X_train, y_train)
         X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-        X_train = X_train[:10]
-        y_train = y_train[:10]
-        X_test = X_test[:1]
-        y_test = y_test[:1]
+#        X_train = X_train[:10]
+#        y_train = y_train[:10]
+#        X_test = X_test[:10]
+#        y_test = y_test[:10]
         print(len(X_train), 'train sequences')
         print(len(X_test), 'test sequences')
 
@@ -530,6 +531,8 @@ if sys.argv[1] == "cnn" or sys.argv[1] == "weighting":
 
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, sys.argv[4]):
     iterid = iteration[0]
+    print ('')
+    print ('Iteration: %s' % iterid)
     (X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp) = iteration[1]
     (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[2]
 
@@ -1652,20 +1655,20 @@ if sys.argv[4] != "nocv":
     if sys.argv[1] == "cnn" or sys.argv[1] == "weighting":
         print('')
         print('Global unweighted mean results:')
-        print('precision = %.4f' % global_precision / 10)
-        print('recall = %.4f' % global_recall / 10)
-        print('microF1 = %.4f' % global_microf1 / 10)
-        print('macroF1 = %.4f' % global_macrof1 / 10)
+        print('precision = %.4f' % (global_precision[0] / 10))
+        print('recall = %.4f' % (global_recall[0] / 10))
+        print('microF1 = %.4f' % (global_microf1[0] / 10))
+        print('macroF1 = %.4f' % (global_macrof1[0] / 10))
         print('')
         print('Global weighted mean results:')
-        print('precision = %.4f' % global_precision / 10)
-        print('recall = %.4f' % global_recall / 10)
-        print('microF1 = %.4f' % global_microf1 / 10)
-        print('macroF1 = %.4f' % global_macrof1 / 10)
+        print('precision = %.4f' % (global_precision[1] / 10))
+        print('recall = %.4f' % (global_recall[1] / 10))
+        print('microF1 = %.4f' % (global_microf1[1] / 10))
+        print('macroF1 = %.4f' % (global_macrof1[1] / 10))
     else:
         print('')
         print('Global results:')
-        print('precision = %.4f' % global_precision / 10)
-        print('recall = %.4f' % global_recall / 10)
-        print('microF1 = %.4f' % global_microf1 / 10)
-        print('macroF1 = %.4f' % global_macrof1 / 10)
+        print('precision = %.4f' % (global_precision[0] / 10))
+        print('recall = %.4f' % (global_recall[0] / 10))
+        print('microF1 = %.4f' % (global_microf1[0] / 10))
+        print('macroF1 = %.4f' % (global_macrof1[0] / 10))
