@@ -98,6 +98,7 @@ def push_indices(x, start, index_from):
     else:
         return x
 
+
 def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
@@ -121,17 +122,17 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     because they're not making the `nb_words` cut here.
     Words that were not seen in the training set but are in the test set
     have simply been skipped. See preprocessText3D
-    
+
     Adapted from keras.datasets.imdb.py by François Chollet
     '''
-    
+
     if path.endswith(".gz"):
         f = gzip.open(path, 'rb')
     else:
         f = open(path, 'rb')
 
-    (x_pos, y_pos) = pkl.load(f)
-    (x_neg, y_neg) = pkl.load(f)
+    ((x_pos, i_pos), y_pos) = pkl.load(f)
+    ((x_neg, i_neg), y_neg) = pkl.load(f)
 
     f.close()
 
@@ -140,12 +141,16 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     np.random.shuffle(x_pos)
     np.random.seed(seed)
     np.random.shuffle(y_pos)
+    np.random.seed(seed)
+    np.random.shuffle(i_pos)
 
     np.random.seed(seed * 2)
     np.random.shuffle(x_neg)
     np.random.seed(seed * 2)
     np.random.shuffle(y_neg)
-    
+    np.random.seed(seed * 2)
+    np.random.shuffle(i_neg)
+
     # keep maxlen words of each tweet
     if maxlen is not None:
         x_pos = cap_length(x_pos, maxlen)
@@ -164,14 +169,16 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     # prepend each sequence with start and raise indices by index_from
     x_pos = push_indices(x_pos, start, index_from)
     x_neg = push_indices(x_neg, start, index_from)
-    
+
     x_pos = np.array(x_pos)
     y_pos = np.array(y_pos)
+    i_pos = np.array(i_pos)
 
     x_neg = np.array(x_neg)
     y_neg = np.array(y_neg)
-    
-    return (x_pos, y_pos), (x_neg, y_neg)
+    i_neg = np.array(i_neg)
+
+    return (x_pos, y_pos, i_pos), (x_neg, y_neg, i_neg)
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
@@ -355,7 +362,7 @@ maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 
 # These come out shuffled
-(x_pos, y_pos), (x_neg, y_neg) = load_data(nb_words=max_features, maxlen=maxlen)
+(x_pos, y_pos, i_pos), (x_neg, y_neg, i_neg) = load_data(nb_words=max_features, maxlen=maxlen)
 
 # length of the test partition
 pos_len = int(len(y_pos)/10.0)
