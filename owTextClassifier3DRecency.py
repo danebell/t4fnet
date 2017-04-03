@@ -226,15 +226,21 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
 
     return embedding_matrix
 
-def load_folds(file):
+def load_folds(file, seed=113):
     print ("Loading folds...")
     folds = list(list() for i in range(10))
+    positives = list(0 for i in range(10))
     f = open(file, 'r')
-    for line in f:
+    lines = f.readlines()
+    np.random.seed(seed)
+    np.random.shuffle(lines)
+    for line in lines:
         (fold, accountID, ow) = line.rstrip().split(',')
         folds[int(fold)].append((accountID, ow))
+        if ow == "Overweight":
+            positives[int(fold)] += 1
     f.close()
-    return folds
+    return folds, positives
 
 def shuffle_in_unison(a, b):
     assert len(a) == len(b)
@@ -365,7 +371,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv):
     (x_pos, y_pos, i_pos), (x_neg, y_neg, i_neg) = pos, neg
 
     if optcv != 'nocv':
-        folds = load_folds(optcv)
+        folds, positives = load_folds(optcv)
         for i in range(0, len(folds)):
             X_train = list()
             y_train = list()
@@ -382,20 +388,23 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv):
                     y_test.append(y_neg[position])
             for j in range(0, len(folds)):
                 if i != j:
+                    negatives = 0
                     for user in folds[j]:
                         if user[1] == "Overweight":
                             position = np.where(i_pos == user[0])[0][0]
                             X_train.append(x_pos[position])
                             y_train.append(y_pos[position])
-                        else:
+                        elif negatives < positives[j]: # Balance training set in the fold
                             position = np.where(i_neg == user[0])[0][0]
                             X_train.append(x_neg[position])
                             y_train.append(y_neg[position])
+                            negatives += 1
 
             X_train = np.array(X_train)
             y_train = np.array(y_train)
             X_test = np.array(X_test)
             y_test = np.array(y_test)
+
 
 #            X_train = X_train[:10]
 #            y_train = y_train[:10]
@@ -528,6 +537,7 @@ if sys.argv[1] == "cnn" or sys.argv[1] == "weighting":
     global_recall.append(0.)
     global_microf1.append(0.)
     global_macrof1.append(0.)
+
 
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, sys.argv[4]):
     iterid = iteration[0]
