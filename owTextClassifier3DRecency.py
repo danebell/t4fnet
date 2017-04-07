@@ -229,7 +229,6 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
 def load_folds(file, seed=113):
     print ("Loading folds...")
     folds = list(list() for i in range(10))
-    positives = list(0 for i in range(10))
     f = open(file, 'r')
     lines = f.readlines()
     np.random.seed(seed)
@@ -237,10 +236,8 @@ def load_folds(file, seed=113):
     for line in lines:
         (fold, accountID, ow) = line.rstrip().split(',')
         folds[int(fold)].append((accountID, ow))
-        if ow == "Overweight":
-            positives[int(fold)] += 1
     f.close()
-    return folds, positives
+    return folds
 
 def shuffle_in_unison(a, b):
     assert len(a) == len(b)
@@ -372,7 +369,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
 
     if optcv != 'nocv':
         itern = int(itern)
-        folds, positives = load_folds(optcv)
+        folds = load_folds(optcv)
         X_train = list()
         y_train = list()
         X_test = list()
@@ -388,17 +385,15 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
                 y_test.append(y_neg[position])
         for j in range(0, len(folds)):
             if itern != j:
-                negatives = 0
                 for user in folds[j]:
                     if user[1] == "Overweight":
                         position = np.where(i_pos == user[0])[0][0]
                         X_train.append(x_pos[position])
                         y_train.append(y_pos[position])
-                    elif negatives < positives[j]: # Balance training set in the fold
+                    else:
                         position = np.where(i_neg == user[0])[0][0]
                         X_train.append(x_neg[position])
                         y_train.append(y_neg[position])
-                        negatives += 1
 
         X_train = np.array(X_train)
         y_train = np.array(y_train)
@@ -468,10 +463,10 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
         X_train, y_train = shuffle_in_unison(X_train, y_train)
         X_test, y_test = shuffle_in_unison(X_test, y_test)
 
-#        X_train = X_train[:10]
-#        y_train = y_train[:10]
-#        X_test = X_test[:10]
-#        y_test = y_test[:10]
+        # X_train = X_train[:10]
+        # y_train = y_train[:10]
+        # X_test = X_test[:10]
+        # y_test = y_test[:10]
         print(len(X_train), 'train sequences')
         print(len(X_test), 'test sequences')
 
@@ -611,6 +606,9 @@ if (sys.argv[1] == "cnn"):
     pred = model1.predict(X_test_flat)
     pred = pred.reshape((test_shp[0], test_shp[1]))
 
+    predfile = open('predictions/cnn_' + iterid + '.pkl', 'wb')
+    pkl.dump(pred, predfile)
+    predfile.close()
 
     # In[ ]:
 
@@ -629,11 +627,20 @@ if (sys.argv[1] == "cnn"):
     y = y_test.flatten()
 
     print('Unweighted mean')
+
+    predfile = open('predictions/cnn_mn_' + iterid + '.pkl', 'wb')
+    pkl.dump(predmn, predfile)
+    predfile.close()
+
     (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn)
     global_precision[1] += precision
     global_recall[1] += recall
     global_microf1[1] += microf1
     global_macrof1[1] += macrof1
+
+    predfile = open('predictions/cnn_wm_' + iterid + '.pkl', 'wb')
+    pkl.dump(predwm, predfile)
+    predfile.close()
 
     print('\nWeighted mean')
     (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm)
@@ -754,6 +761,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/rnn_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -821,6 +833,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/birnn_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -897,6 +914,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/stacked-rnn_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -973,6 +995,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/mlp_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1050,6 +1077,10 @@ else:
         pred = modelRWeight.predict(X_test_mid)
         pred = pred.reshape((test_shp[0], test_shp[1]))
 
+        predfile = open('predictions/rnn-rweights_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         # In[23]:
 
         # account classification with each tweet's classification getting an equal vote
@@ -1067,6 +1098,11 @@ else:
         y = y_test.flatten()
 
         print('Unweighted mean')
+
+        predfile = open('predictions/rnn-rweights_nm_' + iterid + '.pkl', 'wb')
+        pkl.dump(predmn, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1074,6 +1110,11 @@ else:
         global_macrof1[0] += macrof1
 
         print('\nWeighted mean')
+
+        predfile = open('predictions/rnn-rweights_wm_' + iterid + '.pkl', 'wb')
+        pkl.dump(predwm, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm)
         global_precision[1] += precision
         global_recall[1] += recall
@@ -1137,6 +1178,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/cnn-pooling_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1200,6 +1246,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/cnn-pooling_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1258,10 +1309,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/cnn-relu_' + iterid + '.h5')
+            modelRelu.save_weights('models/poolrecency_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/cnn-relu_' + iterid + '.h5')
+            modelRelu.load_weights('models/poolrecency_' + iterid + '.h5')
 
 
 
@@ -1276,6 +1327,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/poolrecency_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1354,6 +1410,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/cnn-relu_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1430,6 +1491,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/cnn-sigrelu_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1489,10 +1555,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/cnn-relu_' + iterid + '.h5')
+            modelRelu.save_weights('models/rnn-relu_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/cnn-relu_' + iterid + '.h5')
+            modelRelu.load_weights('models/rnn-relu_' + iterid + '.h5')
 
         # In[33]:
 
@@ -1505,6 +1571,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/rnn-relu_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1577,6 +1648,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/cnn-attention_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
@@ -1638,10 +1714,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/cnn-relu_' + iterid + '.h5')
+            modelRelu.save_weights('models/softmax_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/cnn-relu_' + iterid + '.h5')
+            modelRelu.load_weights('models/sotfmax_' + iterid + '.h5')
 
         # In[33]:
 
@@ -1654,6 +1730,11 @@ else:
         pred = pred.flatten()
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
+
+        predfile = open('predictions/sotfmax_' + iterid + '.pkl', 'wb')
+        pkl.dump(pred, predfile)
+        predfile.close()
+
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
         global_recall[0] += recall
