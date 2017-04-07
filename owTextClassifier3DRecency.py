@@ -374,6 +374,8 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
         y_train = list()
         X_test = list()
         y_test = list()
+        X_dev = list()
+        y_dev = list()
         for user in folds[itern]:
             if user[1] == "Overweight":
                 position = np.where(i_pos == user[0])[0][0]
@@ -383,8 +385,20 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
                 position = np.where(i_neg == user[0])[0][0]
                 X_test.append(x_neg[position])
                 y_test.append(y_neg[position])
+        nitern = itern + 1
+        if nitern == 10:
+            nitern = 0
+        for user in folds[nitern]:
+            if user[1] == "Overweight":
+                position = np.where(i_pos == user[0])[0][0]
+                X_dev.append(x_pos[position])
+                y_dev.append(y_pos[position])
+            else:
+                position = np.where(i_neg == user[0])[0][0]
+                X_dev.append(x_neg[position])
+                y_dev.append(y_neg[position])
         for j in range(0, len(folds)):
-            if itern != j:
+            if itern != j and niter != j:
                 for user in folds[j]:
                     if user[1] == "Overweight":
                         position = np.where(i_pos == user[0])[0][0]
@@ -399,23 +413,28 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
         y_train = np.array(y_train)
         X_test = np.array(X_test)
         y_test = np.array(y_test)
+        X_dev = np.array(X_dev)
+        y_dev = np.array(y_dev)
 
-
-        # X_train = X_train[:10]
-        # y_train = y_train[:10]
-        # X_test = X_test[:10]
-        # y_test = y_test[:10]
+#        X_train = X_train[:10]
+#        y_train = y_train[:10]
+#        X_test = X_test[:10]
+#        y_test = y_test[:10]
         print(len(X_train), 'train sequences')
         print(len(X_test), 'test sequences')
+        print(len(X_dev), 'dev sequences')
 
         # In[4]:
 
         X_train = pad3d(X_train, maxtweets=maxtweets, maxlen=maxlen)
         X_test = pad3d(X_test, maxtweets=maxtweets, maxlen=maxlen)
+        X_dev = pad3d(X_dev, maxtweets=maxtweets, maxlen=maxlen)
         train_shp = X_train.shape
         test_shp = X_test.shape
+        dev_shp = X_dev.shape
         print('X_train shape:', train_shp)
         print('X_test shape:', test_shp)
+        print('X_dev shape:', dev_shp)
 
         # In[7]:
 
@@ -426,20 +445,26 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
         X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
         y_test_flat = y_test.repeat(test_shp[1])
 
+        X_dev_flat = X_dev.reshape(dev_shp[0] * dev_shp[1], dev_shp[2])
+        y_dev_flat = y_dev.repeat(dev_shp[1])
+        
         # We shuffle the flattened reps. for better training
         # (but keep the original order for our by-account classification)
         X_test_shuff, y_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat)
-
+        X_dev_shuff, y_dev_shuff = shuffle_in_unison(X_dev_flat, y_dev_flat)
+        
         # In[8]:
 
         # just clearing up space -- from now on, we use the flattened representations
         del X_train
         del X_test
-
+        del X_dev
+        
         iteration = list()
         iteration.append('fold' + str(itern+1))
         iteration.append((X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp))
         iteration.append((X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp))
+        iteration.append((X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff, dev_shp))
         return iteration
 
     else:
@@ -540,6 +565,9 @@ print ('')
 print ('Iteration: %s' % iterid)
 (X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp) = iteration[1]
 (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[2]
+if sys.argv[6] == "dev":
+    (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[3]
+
 
 #
 # Pretrain cnn
