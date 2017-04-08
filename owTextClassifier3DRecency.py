@@ -398,7 +398,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
                 X_dev.append(x_neg[position])
                 y_dev.append(y_neg[position])
         for j in range(0, len(folds)):
-            if itern != j and niter != j:
+            if itern != j and nitern != j:
                 for user in folds[j]:
                     if user[1] == "Overweight":
                         position = np.where(i_pos == user[0])[0][0]
@@ -416,10 +416,12 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
         X_dev = np.array(X_dev)
         y_dev = np.array(y_dev)
 
-#        X_train = X_train[:10]
-#        y_train = y_train[:10]
-#        X_test = X_test[:10]
-#        y_test = y_test[:10]
+        # X_train = X_train[:10]
+        # y_train = y_train[:10]
+        # X_test = X_test[:10]
+        # y_test = y_test[:10]
+        # X_dev = X_dev[:10]
+        # y_dev = y_dev[:10]
         print(len(X_train), 'train sequences')
         print(len(X_test), 'test sequences')
         print(len(X_dev), 'dev sequences')
