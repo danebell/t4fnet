@@ -416,12 +416,12 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
         X_dev = np.array(X_dev)
         y_dev = np.array(y_dev)
 
-        # X_train = X_train[:10]
-        # y_train = y_train[:10]
-        # X_test = X_test[:10]
-        # y_test = y_test[:10]
-        # X_dev = X_dev[:10]
-        # y_dev = y_dev[:10]
+#        X_train = X_train[:10]
+#        y_train = y_train[:10]
+#        X_test = X_test[:10]
+#        y_test = y_test[:10]
+#        X_dev = X_dev[:10]
+#        y_dev = y_dev[:10]
         print(len(X_train), 'train sequences')
         print(len(X_test), 'test sequences')
         print(len(X_dev), 'dev sequences')
@@ -567,7 +567,9 @@ print ('')
 print ('Iteration: %s' % iterid)
 (X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp) = iteration[1]
 (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[2]
+evalset = "test"
 if sys.argv[6] == "dev":
+    evalset = "dev"
     (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[3]
 
 
@@ -636,7 +638,7 @@ if (sys.argv[1] == "cnn"):
     pred = model1.predict(X_test_flat)
     pred = pred.reshape((test_shp[0], test_shp[1]))
 
-    predfile = open('predictions/cnn_' + iterid + '.pkl', 'wb')
+    predfile = open('predictions/cnn_' + iterid + '_' + evalset + '.pkl', 'wb')
     pkl.dump(pred, predfile)
     predfile.close()
 
@@ -658,7 +660,7 @@ if (sys.argv[1] == "cnn"):
 
     print('Unweighted mean')
 
-    predfile = open('predictions/cnn_mn_' + iterid + '.pkl', 'wb')
+    predfile = open('predictions/cnn_mn_' + iterid + '_' + evalset + '.pkl', 'wb')
     pkl.dump(predmn, predfile)
     predfile.close()
 
@@ -668,7 +670,7 @@ if (sys.argv[1] == "cnn"):
     global_microf1[1] += microf1
     global_macrof1[1] += macrof1
 
-    predfile = open('predictions/cnn_wm_' + iterid + '.pkl', 'wb')
+    predfile = open('predictions/cnn_wm_' + iterid + '_' + evalset + '.pkl', 'wb')
     pkl.dump(predwm, predfile)
     predfile.close()
 
@@ -792,7 +794,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/rnn_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/rnn_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -864,7 +866,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/birnn_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/birnn_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -945,7 +947,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/stacked-rnn_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/stacked-rnn_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1026,7 +1028,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/mlp_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/mlp_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1107,7 +1109,7 @@ else:
         pred = modelRWeight.predict(X_test_mid)
         pred = pred.reshape((test_shp[0], test_shp[1]))
 
-        predfile = open('predictions/rnn-rweights_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/rnn-rweights_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1129,7 +1131,7 @@ else:
 
         print('Unweighted mean')
 
-        predfile = open('predictions/rnn-rweights_nm_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/rnn-rweights_nm_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(predmn, predfile)
         predfile.close()
 
@@ -1141,7 +1143,7 @@ else:
 
         print('\nWeighted mean')
 
-        predfile = open('predictions/rnn-rweights_wm_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/rnn-rweights_wm_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(predwm, predfile)
         predfile.close()
 
@@ -1209,7 +1211,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-pooling_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/cnn-pooling_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1277,7 +1279,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-pooling_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/cnn-pooling_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1358,7 +1360,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/poolrecency_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/poolrecency_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1441,7 +1443,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-relu_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/cnn-relu_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1522,7 +1524,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-sigrelu_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/cnn-sigrelu_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1602,7 +1604,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/rnn-relu_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/rnn-relu_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1679,7 +1681,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-attention_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/cnn-attention_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1761,7 +1763,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/sotfmax_' + iterid + '.pkl', 'wb')
+        predfile = open('predictions/sotfmax_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
