@@ -327,12 +327,14 @@ def bootstrap(gold, pred, reps=100000):
     fps = np.array(fps)
     prec = tps.sum() / (tps.sum() + fps.sum())
     rec = tps.sum() / (tps.sum() + fns.sum())
+    f1 = 2 * precision * recall / (precision + recall)
     microf1 = 2 * prec * rec / (prec + rec)
     macrof1 = f1s.sum() / len(f1s)
     
     print('accuracy = %.4f' % acc)
     print('precision = %.4f' % precision)
     print('recall = %.4f' % recall)
+    print('f1 = %.4f' % f1)
     print('microF1 = %.4f' % microf1)
     print('macroF1 = %.4f' % macrof1)
     print('baseline = %.4f' % baseline)
@@ -524,7 +526,6 @@ nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen)
-print ("a")
 iteration = gen_iterations(pos, neg, max_features, maxtweets, maxlen, sys.argv[3], sys.argv[4])
 iterid = iteration[0]
 print ('')
@@ -539,30 +540,37 @@ if sys.argv[2] == "dev":
 predfile = open(sys.argv[1], 'rb')
 pred = pkl.load(predfile)
 predfile.close()
-print (pred)
+
 
 # In[ ]:
 
-threshold = sys.argv[5]
-    
+thresholds = map(float,sys.argv[5].split(','))
+
 # account classification with each tweet's classification getting an equal vote
 predmn = np.mean(pred, axis=1)
-predmn = (predmn >= threshold).astype(int)
+#predmn = np.mean(np.round(pred),axis=1)
 
-# weight by recency (most recent tweets first)
 wts = np.linspace(1., 0.01, 2000)
 predwm = np.average(pred, axis=1, weights=wts)
-predwm = (predwm >= threshold).astype(int)
+#predwm = np.average(np.round(pred),axis=1, weights=wts)
 
 y = y_test.flatten()
 
 print ('File:',sys.argv[1])
 print ('Fold:',sys.argv[4])
 print ('Set:',sys.argv[2])
-print ('Treshold:', threshold)
-print ('')
-print('\nUnweighted mean')
-(acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn)
 
-print('\nWeighted mean')
-(acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm)
+for threshold in thresholds:
+
+    print ('\nTreshold:', threshold)
+
+    predmn_th = (predmn >= threshold).astype(int)
+
+    # weight by recency (most recent tweets first)
+    predwm_th = (predwm >= threshold).astype(int)
+
+    print('\nUnweighted mean')
+    (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn_th)
+
+    print('\nWeighted mean')
+    (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm_th)
