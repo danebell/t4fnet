@@ -5,6 +5,7 @@ Created on Sat Apr  8 17:03:00 2017
 
 @author: egoitz
 """
+from __future__ import print_function
 import sys
 import pickle as pkl
 import numpy as np
@@ -339,7 +340,7 @@ def bootstrap(gold, pred, reps=100000):
     print('macroF1 = %.4f' % macrof1)
     print('baseline = %.4f' % baseline)
     print('p = %.6f%s' % (p, stars))
-    return (acc, precision, recall, microf1, macrof1, baseline, p)
+    return (acc, precision, recall, f1, microf1, macrof1, baseline, p)
 
 
 
@@ -560,6 +561,10 @@ print ('File:',sys.argv[1])
 print ('Fold:',sys.argv[4])
 print ('Set:',sys.argv[2])
 
+maxth_mn=0
+maxf1_mn=0
+maxth_wm=0
+maxf1_wm=0
 for threshold in thresholds:
 
     print ('\nTreshold:', threshold)
@@ -570,7 +575,16 @@ for threshold in thresholds:
     predwm_th = (predwm >= threshold).astype(int)
 
     print('\nUnweighted mean')
-    (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn_th)
+    (acc, precision, recall, f1, microf1, macrof1, baseline, p) = bootstrap(y, predmn_th)
+    if f1 > maxf1_mn:
+        maxf1_mn = f1
+        maxth_mn = threshold
 
     print('\nWeighted mean')
-    (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm_th)
+    (acc, precision, recall, f1, microf1, macrof1, baseline, p) = bootstrap(y, predwm_th)
+    if f1 > maxf1_wm:
+        maxf1_wm = f1
+        maxth_wm = threshold
+
+print('Max unweighted threshold:',maxth_mn,', f1:', maxf1_mn)
+print('Max weighted threshold:',maxth_wm,', f1:', maxf1_wm)
