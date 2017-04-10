@@ -572,6 +572,7 @@ if sys.argv[6] == "dev":
     evalset = "dev"
     (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[3]
 
+del iteration
 
 #
 # Pretrain cnn
