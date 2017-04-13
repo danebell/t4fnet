@@ -114,49 +114,24 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     
     f.close()
 
-    # randomize datum order
-    np.random.seed(seed)
-    np.random.shuffle(x_pos)
     np.random.seed(seed)
     np.random.shuffle(y_pos)
     np.random.seed(seed)
     np.random.shuffle(i_pos)
 
     np.random.seed(seed * 2)
-    np.random.shuffle(x_neg)
-    np.random.seed(seed * 2)
     np.random.shuffle(y_neg)
     np.random.seed(seed * 2)
     np.random.shuffle(i_neg)
 
-#    # keep maxlen words of each tweet
-#    if maxlen is not None:
-#        x_pos = cap_length(x_pos, maxlen)
-#        x_neg = cap_length(x_neg, maxlen)
-#
-#    # cut off infrequent words to vocab of size nb_words
-#    if nb_words is not None:
-#        x_pos = cap_words(x_pos, nb_words, oov)
-#        x_neg = cap_words(x_neg, nb_words, oov)
-#
-#    # cut off most frequent skip_top words
-#    if skip_top > 0:
-#        x_pos = skip_n(x_pos, skip_top, oov)
-#        x_neg = skip_n(x_neg, skip_top, oov)
-
-    # prepend each sequence with start and raise indices by index_from
-    x_pos = push_indices(x_pos, start, index_from)
-    x_neg = push_indices(x_neg, start, index_from)
     
-    x_pos = np.array(x_pos)
     y_pos = np.array(y_pos)
     i_pos = np.array(i_pos)
 
-    x_neg = np.array(x_neg)
     y_neg = np.array(y_neg)
     i_neg = np.array(i_neg)
     
-    return (x_pos, y_pos, i_pos), (x_neg, y_neg, i_neg)
+    return (y_pos, i_pos), (y_neg, i_neg)
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
@@ -217,15 +192,12 @@ def load_folds(file, seed=113):
     f.close()
     return folds
 
-def shuffle_in_unison(a, b):
-    assert len(a) == len(b)
+def shuffle_in_unison(a):
     shuffled_a = np.empty(a.shape, dtype=a.dtype)
-    shuffled_b = np.empty(b.shape, dtype=b.dtype)
     permutation = np.random.permutation(len(a))
     for old_index, new_index in enumerate(permutation):
         shuffled_a[new_index] = a[old_index]
-        shuffled_b[new_index] = b[old_index]
-    return shuffled_a, shuffled_b
+    return shuffled_a
 
 def bootstrap(gold, pred, reps=100000):
     '''
@@ -279,8 +251,12 @@ def bootstrap(gold, pred, reps=100000):
             fp = fp +1
         else:
             tn = tn +1
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
+    if tp == 0:
+        precision = 0.
+        recall = 0.
+    else:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
 
     f1s = []
     tps = []
@@ -328,7 +304,10 @@ def bootstrap(gold, pred, reps=100000):
     fps = np.array(fps)
     prec = tps.sum() / (tps.sum() + fps.sum())
     rec = tps.sum() / (tps.sum() + fns.sum())
-    f1 = 2 * precision * recall / (precision + recall)
+    if precision == 0 and recall == 0:
+        f1 = 0
+    else:
+        f1 = 2 * precision * recall / (precision + recall)
     microf1 = 2 * prec * rec / (prec + rec)
     macrof1 = f1s.sum() / len(f1s)
     
@@ -345,25 +324,20 @@ def bootstrap(gold, pred, reps=100000):
 
 
 def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
-    (x_pos, y_pos, i_pos), (x_neg, y_neg, i_neg) = pos, neg
+    (y_pos, i_pos), (y_neg, i_neg) = pos, neg
 
     if optcv != 'nocv':
         itern = int(itern)
         folds = load_folds(optcv)
-        X_train = list()
         y_train = list()
-        X_test = list()
         y_test = list()
-        X_dev = list()
         y_dev = list()
         for user in folds[itern]:
             if user[1] == "Overweight":
                 position = np.where(i_pos == user[0])[0][0]
-                X_test.append(x_pos[position])
                 y_test.append(y_pos[position])
             else:
                 position = np.where(i_neg == user[0])[0][0]
-                X_test.append(x_neg[position])
                 y_test.append(y_neg[position])
         nitern = itern + 1
         if nitern == 10:
@@ -371,82 +345,52 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, optcv, itern):
         for user in folds[nitern]:
             if user[1] == "Overweight":
                 position = np.where(i_pos == user[0])[0][0]
-                X_dev.append(x_pos[position])
                 y_dev.append(y_pos[position])
             else:
                 position = np.where(i_neg == user[0])[0][0]
-                X_dev.append(x_neg[position])
                 y_dev.append(y_neg[position])
         for j in range(0, len(folds)):
             if itern != j and nitern != j:
                 for user in folds[j]:
                     if user[1] == "Overweight":
                         position = np.where(i_pos == user[0])[0][0]
-                        X_train.append(x_pos[position])
                         y_train.append(y_pos[position])
                     else:
                         position = np.where(i_neg == user[0])[0][0]
-                        X_train.append(x_neg[position])
                         y_train.append(y_neg[position])
 
-        X_train = np.array(X_train)
-        y_train = np.array(y_train)
-        X_test = np.array(X_test)
-        y_test = np.array(y_test)
-        X_dev = np.array(X_dev)
-        y_dev = np.array(y_dev)
 
-#        X_train = X_train[:10]
-#        y_train = y_train[:10]
-#        X_test = X_test[:10]
-#        y_test = y_test[:10]
-#        X_dev = X_dev[:10]
-#        y_dev = y_dev[:10]
-        print(len(X_train), 'train sequences')
-        print(len(X_test), 'test sequences')
-        print(len(X_dev), 'dev sequences')
+        y_train = np.array(y_train)
+        y_test = np.array(y_test)
+        y_dev = np.array(y_dev)
 
         # In[4]:
 
-        X_train = pad3d(X_train, maxtweets=maxtweets, maxlen=maxlen)
-        X_test = pad3d(X_test, maxtweets=maxtweets, maxlen=maxlen)
-        X_dev = pad3d(X_dev, maxtweets=maxtweets, maxlen=maxlen)
-        train_shp = X_train.shape
-        test_shp = X_test.shape
-        dev_shp = X_dev.shape
-        print('X_train shape:', train_shp)
-        print('X_test shape:', test_shp)
-        print('X_dev shape:', dev_shp)
+        train_shp = y_train.shape
+        test_shp = y_test.shape
+        dev_shp = y_dev.shape
 
         # In[7]:
 
-        X_train_flat = X_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
-        y_train_flat = y_train.repeat(train_shp[1])
-        X_train_shuff, y_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat)
-
-        X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
-        y_test_flat = y_test.repeat(test_shp[1])
-
-        X_dev_flat = X_dev.reshape(dev_shp[0] * dev_shp[1], dev_shp[2])
-        y_dev_flat = y_dev.repeat(dev_shp[1])
+        y_train_flat = y_train.repeat(train_shp[0])
+        y_train_shuff = shuffle_in_unison(y_train_flat)
+        y_test_flat = y_test.repeat(test_shp[0])
+        y_dev_flat = y_dev.repeat(dev_shp[0])
         
         # We shuffle the flattened reps. for better training
         # (but keep the original order for our by-account classification)
-        X_test_shuff, y_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat)
-        X_dev_shuff, y_dev_shuff = shuffle_in_unison(X_dev_flat, y_dev_flat)
+        y_test_shuff = shuffle_in_unison(y_test_flat)
+        y_dev_shuff = shuffle_in_unison(y_dev_flat)
         
         # In[8]:
 
         # just clearing up space -- from now on, we use the flattened representations
-        del X_train
-        del X_test
-        del X_dev
         
         iteration = list()
         iteration.append('fold' + str(itern+1))
-        iteration.append((X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp))
-        iteration.append((X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp))
-        iteration.append((X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff, dev_shp))
+        iteration.append((y_train, y_train_flat, y_train_shuff, train_shp))
+        iteration.append((y_test, y_test_flat, y_test_shuff, test_shp))
+        iteration.append((y_dev, y_dev_flat, y_dev_shuff, dev_shp))
         return iteration
 
     else:
@@ -531,12 +475,12 @@ iteration = gen_iterations(pos, neg, max_features, maxtweets, maxlen, sys.argv[3
 iterid = iteration[0]
 print ('')
 print ('Iteration: %s' % iterid)
-(X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp) = iteration[1]
-(X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[2]
+(y_train, y_train_flat, y_train_shuff, train_shp) = iteration[1]
+(y_test, y_test_flat, y_test_shuff, test_shp) = iteration[2]
 evalset = "test"
 if sys.argv[2] == "dev":
     evalset = "dev"
-    (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[3]
+    (y_test, y_test_flat, y_test_shuff, test_shp) = iteration[3]
 
 predfile = open(sys.argv[1], 'rb')
 pred = pkl.load(predfile)
@@ -547,13 +491,18 @@ predfile.close()
 
 thresholds = map(float,sys.argv[5].split(','))
 
-# account classification with each tweet's classification getting an equal vote
-predmn = np.mean(pred, axis=1)
-#predmn = np.mean(np.round(pred),axis=1)
+predmn = None
+predwm = None
+if pred.ndim==1:
+    predmn = pred
+else:
+    # account classification with each tweet's classification getting an equal vote
+    predmn = np.mean(pred, axis=1)
+    #predmn = np.mean(np.round(pred),axis=1)
 
-wts = np.linspace(1., 0.01, 2000)
-predwm = np.average(pred, axis=1, weights=wts)
-#predwm = np.average(np.round(pred),axis=1, weights=wts)
+    wts = np.linspace(1., 0.01, 2000)
+    predwm = np.average(pred, axis=1, weights=wts)
+    #predwm = np.average(np.round(pred),axis=1, weights=wts)
 
 y = y_test.flatten()
 
@@ -569,22 +518,24 @@ for threshold in thresholds:
 
     print ('\nTreshold:', threshold)
 
-    predmn_th = (predmn >= threshold).astype(int)
+    if predmn is not None:
+        predmn_th = (predmn >= threshold).astype(int)
+        print('\nUnweighted mean')
+        (acc, precision, recall, f1, microf1, macrof1, baseline, p) = bootstrap(y, predmn_th)
+        if f1 > maxf1_mn:
+            maxf1_mn = f1
+            maxth_mn = threshold
 
-    # weight by recency (most recent tweets first)
-    predwm_th = (predwm >= threshold).astype(int)
+    if predwm is not None:
+        # weight by recency (most recent tweets first)
+        predwm_th = (predwm >= threshold).astype(int)
+        print('\nWeighted mean')
+        (acc, precision, recall, f1, microf1, macrof1, baseline, p) = bootstrap(y, predwm_th)
+        if f1 > maxf1_wm:
+            maxf1_wm = f1
+            maxth_wm = threshold
 
-    print('\nUnweighted mean')
-    (acc, precision, recall, f1, microf1, macrof1, baseline, p) = bootstrap(y, predmn_th)
-    if f1 > maxf1_mn:
-        maxf1_mn = f1
-        maxth_mn = threshold
-
-    print('\nWeighted mean')
-    (acc, precision, recall, f1, microf1, macrof1, baseline, p) = bootstrap(y, predwm_th)
-    if f1 > maxf1_wm:
-        maxf1_wm = f1
-        maxth_wm = threshold
-
-print('Max unweighted threshold:',maxth_mn,', f1:', maxf1_mn)
-print('Max weighted threshold:',maxth_wm,', f1:', maxf1_wm)
+if predmn is not None:
+    print('Max unweighted threshold:',maxth_mn,', f1:', maxf1_mn)
+if predwm is not None:
+    print('Max weighted threshold:',maxth_wm,', f1:', maxf1_wm)
