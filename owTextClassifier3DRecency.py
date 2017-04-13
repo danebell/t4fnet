@@ -1106,27 +1106,24 @@ else:
         modelRWeight.summary()
 
 
-        # In[31]:
-
-        chunk = 256
-        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-        y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
-        for i in range(0, train_shp[0], chunk):
-            last_idx = min(chunk, train_shp[0] - i)
-            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-            #X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-            X_train_chunk = X_test_embs[i * maxtweets : (i + last_idx) * maxtweets]
-            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-            X_train_chunk = np.fliplr(X_train_chunk)
-            X_train_mid[i:(i + last_idx)] = X_train_chunk
-            y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
-            y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
-            y_train_chunk = np.fliplr(y_train_chunk)
-            y_train_mid[i:(i + last_idx)] = y_train_chunk
-
-
         # In[32]:
         if (sys.argv[3] == "train"):
+            chunk = 256
+            X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+            y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
+            for i in range(0, train_shp[0], chunk):
+                last_idx = min(chunk, train_shp[0] - i)
+                print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+                #X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+                X_train_chunk = X_test_embs[i * maxtweets : (i + last_idx) * maxtweets]
+                X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+                X_train_chunk = np.fliplr(X_train_chunk)
+                X_train_mid[i:(i + last_idx)] = X_train_chunk
+                y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
+                y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
+                y_train_chunk = np.fliplr(y_train_chunk)
+                y_train_mid[i:(i + last_idx)] = y_train_chunk
+
             modelRWeight.fit(X_train_mid,
                           y_train_mid,
                           batch_size=batch_size,
@@ -1686,21 +1683,19 @@ else:
 
         modelAttention.summary()
 
-        # In[31]:
-
-        chunk = 256
-        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-        for i in range(0, train_shp[0], chunk):
-            last_idx = min(chunk, train_shp[0] - i)
-            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-            #X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-            X_train_chunk = X_test_embs[i * maxtweets : (i + last_idx) * maxtweets]
-            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-            X_train_chunk = np.fliplr(X_train_chunk)
-            X_train_mid[i:(i + last_idx)] = X_train_chunk
 
         # In[32]:
         if (sys.argv[3] == "train"):
+            chunk = 256
+            X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+            for i in range(0, train_shp[0], chunk):
+                last_idx = min(chunk, train_shp[0] - i)
+                print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+                X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+                X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+                X_train_chunk = np.fliplr(X_train_chunk)
+                X_train_mid[i:(i + last_idx)] = X_train_chunk
+
             modelAttention.fit(X_train_mid,
                           y_train,
                           batch_size=batch_size,
