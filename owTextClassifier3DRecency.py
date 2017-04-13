@@ -572,6 +572,7 @@ if sys.argv[6] == "dev":
     evalset = "dev"
     (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[3]
 
+print (sys.getsizeof(iteration))
 del iteration
 
 #
@@ -580,28 +581,51 @@ del iteration
 
 print('Build first model (tweet-level)...')
 model1 = Sequential()
-model1.add(Embedding(max_features + 3,
-                     emb_dim,
-                     input_length=maxlen,
-                     weights=[embeddings],
-                    name="emb"))#,
-                     #mask_zero=True))
-model1.add(Convolution1D(nb_filter=nb_filter,
-                         filter_length=filter_length,
-                         border_mode='valid',
-                         activation='relu',
-                         subsample_length=1,
-                         name="conv1d"))
-model1.add(MaxPooling1D(pool_length=pool_length))
-model1.add(Flatten())
-model1.add(Dense(128, name="dense1"))
-model1.add(Activation('relu'))
-model1.add(Dropout(0.4, name="dense2"))
-model1.add(Dense(1, name="dense3"))
-model1.add(Activation('sigmoid'))
-model1.compile(loss='binary_crossentropy',
-               optimizer='adam',
-               metrics=['accuracy'])
+
+if (sys.argv[1] == "embs"):
+    model1.add(Embedding(max_features + 3,
+                         emb_dim,
+                         input_length=maxlen,
+                         weights=[embeddings],
+                        name="emb"))#,
+                         #mask_zero=True))
+    model1.add(Convolution1D(nb_filter=nb_filter,
+                             filter_length=filter_length,
+                             border_mode='valid',
+                             activation='relu',
+                             subsample_length=1,
+                             name="conv1d"))
+    model1.add(MaxPooling1D(pool_length=pool_length))
+    model1.add(Flatten())
+    model1.add(Dense(128, name="dense1"))
+    model1.add(Activation('relu'))
+    model1.compile(loss='binary_crossentropy',
+                   optimizer='adam',
+                   metrics=['accuracy'])
+
+elif (sys.argv[1] == "cnn" or sys.argv[2] == "pre"):
+    model1.add(Embedding(max_features + 3,
+                         emb_dim,
+                         input_length=maxlen,
+                         weights=[embeddings],
+                        name="emb"))#,
+                         #mask_zero=True))
+    model1.add(Convolution1D(nb_filter=nb_filter,
+                             filter_length=filter_length,
+                             border_mode='valid',
+                             activation='relu',
+                             subsample_length=1,
+                             name="conv1d"))
+    model1.add(MaxPooling1D(pool_length=pool_length))
+    model1.add(Flatten())
+    model1.add(Dense(128, name="dense1"))
+    model1.add(Activation('relu'))
+    model1.add(Dropout(0.4, name="dense2"))
+    model1.add(Dense(1, name="dense3"))
+    model1.add(Activation('sigmoid'))
+    model1.compile(loss='binary_crossentropy',
+                   optimizer='adam',
+                   metrics=['accuracy'])
 
 
 # In[14]:
@@ -617,9 +641,9 @@ if (sys.argv[2] == "pre"):
                validation_data=(X_test_shuff, y_test_shuff))
     model1.save_weights('models/tweet_classifier_' + iterid + '.h5')
 
-else:
-    print('Load model...')
-    model1.load_weights('models/tweet_classifier_' + iterid + '.h5')
+elif (sys.argv[1] == "cnn" ):
+        print('Load model...')
+        model1.load_weights('models/tweet_classifier_' + iterid + '.h5')
 
 
 if (sys.argv[1] == "cnn"):
@@ -682,6 +706,18 @@ if (sys.argv[1] == "cnn"):
     global_microf1[0] += microf1
     global_macrof1[0] += macrof1
 
+elif (sys.argv[1] == "embs"):
+    # In[ ]:
+
+    emb = model1.predict(X_test_flat, batch_size=batch_size)
+    
+    print (emb)
+
+    predfile = open('cnn_embs/embs_' + iterid + '.pkl', 'wb')
+    pkl.dump(emb, predfile)
+    predfile.close()
+
+
 else:
     # ## Intermediate data structure
     #
@@ -689,40 +725,44 @@ else:
 
     # In[25]:
 
-    intermediate = Sequential()
-    intermediate.add(Embedding(max_features + 3,
-                         emb_dim,
-                         input_length=maxlen,
-                         weights=[embeddings]
-                        ))#,
-                         #mask_zero=True))
-    intermediate.add(Convolution1D(nb_filter=nb_filter,
-                             filter_length=filter_length,
-                             border_mode='valid',
-                             activation='relu',
-                             subsample_length=1))
-    intermediate.add(MaxPooling1D(pool_length=pool_length))
-    intermediate.add(Flatten())
-    intermediate.add(Dense(128))
-    intermediate.add(Activation('relu'))
-
-    for l in range(len(intermediate.layers)):
-        intermediate.layers[l].set_weights(model1.layers[l].get_weights())
-        intermediate.layers[l]
-
-    intermediate.compile(loss='binary_crossentropy',
-                         optimizer='adam',
-                         metrics=['accuracy'])
-
-
-    # In[26]:
-
-    intermediate.summary()
-
-
-    # In[28]:
-
-    X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
+#    intermediate = Sequential()
+#    intermediate.add(Embedding(max_features + 3,
+#                         emb_dim,
+#                         input_length=maxlen,
+#                         weights=[embeddings]
+#                        ))#,
+#                         #mask_zero=True))
+#    intermediate.add(Convolution1D(nb_filter=nb_filter,
+#                             filter_length=filter_length,
+#                             border_mode='valid',
+#                             activation='relu',
+#                             subsample_length=1))
+#    intermediate.add(MaxPooling1D(pool_length=pool_length))
+#    intermediate.add(Flatten())
+#    intermediate.add(Dense(128))
+#    intermediate.add(Activation('relu'))
+#
+#    for l in range(len(intermediate.layers)):
+#        intermediate.layers[l].set_weights(model1.layers[l].get_weights())
+#        intermediate.layers[l]
+#
+#    intermediate.compile(loss='binary_crossentropy',
+#                         optimizer='adam',
+#                         metrics=['accuracy'])
+#
+#
+#    # In[26]:
+#
+#    intermediate.summary()
+#
+#
+#    # In[28]:
+#
+#    X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
+    embfile = open('cnn_embs/embs_' + iterid + '.pkl', 'rb')
+    X_test_embs = pkl.load(embfile)
+    embfile.close()
+    X_test_mid = X_test_embs
     X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
     X_test_mid = np.fliplr(X_test_mid)
     y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
@@ -1074,7 +1114,8 @@ else:
         for i in range(0, train_shp[0], chunk):
             last_idx = min(chunk, train_shp[0] - i)
             print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            #X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_test_embs[i * maxtweets : (i + last_idx) * maxtweets]
             X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
             X_train_chunk = np.fliplr(X_train_chunk)
             X_train_mid[i:(i + last_idx)] = X_train_chunk
@@ -1652,7 +1693,8 @@ else:
         for i in range(0, train_shp[0], chunk):
             last_idx = min(chunk, train_shp[0] - i)
             print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            #X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_test_embs[i * maxtweets : (i + last_idx) * maxtweets]
             X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
             X_train_chunk = np.fliplr(X_train_chunk)
             X_train_mid[i:(i + last_idx)] = X_train_chunk
