@@ -1114,8 +1114,7 @@ else:
             for i in range(0, train_shp[0], chunk):
                 last_idx = min(chunk, train_shp[0] - i)
                 print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-                #X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-                X_train_chunk = X_test_embs[i * maxtweets : (i + last_idx) * maxtweets]
+                X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
                 X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
                 X_train_chunk = np.fliplr(X_train_chunk)
                 X_train_mid[i:(i + last_idx)] = X_train_chunk
