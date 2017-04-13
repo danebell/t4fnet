@@ -1715,12 +1715,13 @@ else:
 
         pred = modelAttention.predict(X_test_mid)
         pred = pred.flatten()
-        pred = (pred >= 0.5).astype(int)
-        y = y_test.flatten()
-
+        
         predfile = open('predictions/cnn-attention_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
+
+        pred = (pred >= 0.5).astype(int)
+        y = y_test.flatten()
 
         (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, pred)
         global_precision[0] += precision
