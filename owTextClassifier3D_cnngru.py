@@ -228,7 +228,7 @@ def shuffle_in_unison(a, b):
         shuffled_b[new_index] = b[old_index]
     return shuffled_a, shuffled_b
 
-def bootstrap(gold, pred, reps=100000):
+def bootstrap(gold, pred, reps=100000, printit=True):
     '''
     # Arguments
         gold: list of gold (ground-truth) integer labels
@@ -280,8 +280,12 @@ def bootstrap(gold, pred, reps=100000):
             fp = fp +1
         else:
             tn = tn +1
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
+
+    precision = 0
+    recall = 0
+    if tp > 0:
+        precision = tp / (tp + fp)
+        recall = tp / (tp + fn)
 
     f1s = []
     tps = []
@@ -329,17 +333,22 @@ def bootstrap(gold, pred, reps=100000):
     fps = np.array(fps)
     prec = tps.sum() / (tps.sum() + fps.sum())
     rec = tps.sum() / (tps.sum() + fns.sum())
+    f1 = 0
+    if precision + recall > 0:
+        f1 = 2 * precision * recall / (precision + recall)
     microf1 = 2 * prec * rec / (prec + rec)
     macrof1 = f1s.sum() / len(f1s)
-    
-    print('accuracy = %.4f' % acc)
-    print('precision = %.4f' % precision)
-    print('recall = %.4f' % recall)
-    print('microF1 = %.4f' % microf1)
-    print('macroF1 = %.4f' % macrof1)
-    print('baseline = %.4f' % baseline)
-    print('p = %.6f%s' % (p, stars))
-    return (acc, precision, recall, microf1, macrof1, baseline, p)
+
+    if printit:
+        print('accuracy = %.4f' % acc)
+        print('precision = %.4f' % precision)
+        print('recall = %.4f' % recall)
+        print('F1 = %.4f' % f1)
+        print('microF1 = %.4f' % microf1)
+        print('macroF1 = %.4f' % macrof1)
+        print('baseline = %.4f' % baseline)
+        print('p = %.6f%s' % (p, stars))
+    return (acc, precision, recall, f1, microf1, macrof1, baseline, p)
 
 
 
@@ -394,12 +403,12 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
         X_dev = np.array(X_dev)
         y_dev = np.array(y_dev)
 
-        X_train = X_train[:10]
-        y_train = y_train[:10]
-        X_test = X_test[:10]
-        y_test = y_test[:10]
-        X_dev = X_dev[:10]
-        y_dev = y_dev[:10]
+        # X_train = X_train[:10]
+        # y_train = y_train[:10]
+        # X_test = X_test[:10]
+        # y_test = y_test[:10]
+        # X_dev = X_dev[:10]
+        # y_dev = y_dev[:10]
         print(len(X_train), 'train sequences')
         print(len(X_test), 'test sequences')
         print(len(X_dev), 'dev sequences')
@@ -435,12 +444,45 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
         del X_dev
         
         iteration = list()
-        iteration.append('fold' + str(itern+1))
+        iteration.append('fold' + str(itern))
         iteration.append((X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp))
         iteration.append((X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp))
         iteration.append((X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff, dev_shp))
         yield iteration
 
+
+
+def get_threshold(gold, pred):
+    maxth = 0.
+    maxf1 = 0.
+    vary = True
+    start = 0.
+    stop = 1.
+    step = 0.05
+    while vary:
+        vary = False
+        earlystop = 0
+        for threshold in np.arange(start, stop, step):
+            pred_th = (pred >= threshold).astype(int)
+            (acc, precision, recall, f1, microf1, macrof1, baseline, p) = bootstrap(gold, pred_th, printit=False)
+            if f1 > maxf1:
+                maxf1 = f1
+                maxth = threshold
+                print("threshold:", maxth, ", F1:", maxf1)
+                vary = True
+                earlystop = 0
+            else:
+                earlystop += 1
+                if earlystop == 2:
+                    start = maxth - step
+                    if start < 0.:
+                        start = 0.
+                    stop = threshold - step
+                    if stop > 1.0:
+                        stop = 1.0
+                    step = step * 0.1
+                    break
+    return maxth
 
 
 max_features = 20000
@@ -455,16 +497,23 @@ nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen)
-
+predictions = dict()
+predictions["cnnv"] = list()
+predictions["cnnw"] = list()
+predictions["gruv"] = list()
+predictions["gruw"] = list()
+gold_test = list()
 foldsfile = "folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
-    print ('')
-    print ('Iteration: %s' % iterid)
+    print('')
+    print('Iteration: %s' % iterid)
     (X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp) = iteration[1]
     (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[2]
     (X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff, dev_shp) = iteration[3]
 
+    gold_dev = y_dev.flatten()
+    gold_test.extend(y_test.flatten())
 
     #
     # Pre-train tweet-level vectors
@@ -512,6 +561,15 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     predDev = modelPre.predict(X_dev_flat)
     predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
+    predDevmn = np.mean(predDev, axis=1)
+    print('Search CNN+V threshold')
+    thldmn = get_threshold(gold_dev, predDevmn)
+
+    wts = np.linspace(1., 0.01, 2000)
+    predDevwm = np.average(predDev, axis=1, weights=wts)
+    print('Search CNN+W threshold')
+    thldwm = get_threshold(gold_dev, predDevwm)
+
     # Prediction for TEST set
     score, acc = modelPre.evaluate(X_test_flat, y_test_flat, batch_size=batch_size)
     print('Test score:', score)
@@ -519,7 +577,14 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     predTest = modelPre.predict(X_test_flat)
     predTest = predTest.reshape((test_shp[0], test_shp[1]))
 
-    y = y_test.flatten()
+    predTestmn = np.mean(predTest, axis=1)
+    predTestmn = (predTestmn >= thldmn).astype(int)
+    predictions["cnnv"].extend(predTestmn)
+
+    wts = np.linspace(1., 0.01, 2000)
+    predTestwm = np.average(predTest, axis=1, weights=wts)
+    predTestwm = (predTestwm >= thldwm).astype(int)
+    predictions["cnnw"].extend(predTestwm)
 
 
     #
@@ -619,6 +684,15 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     predDev = modelGRU.predict(X_dev_mid)
     predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
+    predDevmn = np.mean(predDev, axis=1)
+    print('Search GRU+V threshold')
+    thldmn = get_threshold(gold_dev, predDevmn)
+
+    wts = np.linspace(1., 0.01, 2000)
+    predDevwm = np.average(predDev, axis=1, weights=wts)
+    print('Search GRU+W threshold')
+    thldwm = get_threshold(gold_dev, predDevwm)
+
     # Prediction for TEST set
     score, acc = modelGRU.evaluate(X_test_mid, y_test_mid, batch_size=batch_size)
     print('Test score:', score)
@@ -626,5 +700,35 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     predTest = modelGRU.predict(X_test_mid)
     predTest = predTest.reshape((test_shp[0], test_shp[1]))
 
+    predTestmn = np.mean(predTest, axis=1)
+    predTestmn = (predTestmn >= thldmn).astype(int)
+    predictions["gruv"].extend(predTestmn)
+
+    wts = np.linspace(1., 0.01, 2000)
+    predTestwm = np.average(predTest, axis=1, weights=wts)
+    predTestwm = (predTestwm >= thldwm).astype(int)
+    predictions["gruw"].extend(predTestwm)
 
 
+gold_test = np.array(gold_test)
+print("\nResults")
+print("\nCNN+V")
+bootstrap(gold_test, np.array(predictions["cnnv"]))
+predfile = open('predictions/cnnv.pkl', 'wb')
+pkl.dump(predictions["cnnv"], predfile)
+predfile.close()
+print("\nCNN+W")
+bootstrap(gold_test, np.array(predictions["cnnw"]))
+predfile = open('predictions/cnnw.pkl', 'wb')
+pkl.dump(predictions["cnnw"], predfile)
+predfile.close()
+print("\nGRU+V")
+bootstrap(gold_test, np.array(predictions["gruv"]))
+predfile = open('predictions/gruv.pkl', 'wb')
+pkl.dump(predictions["gruv"], predfile)
+predfile.close()
+print("\nGRU+W")
+bootstrap(gold_test, np.array(predictions["gruw"]))
+predfile = open('predictions/gruw.pkl', 'wb')
+pkl.dump(predictions["gruw"], predfile)
+predfile.close()
