@@ -548,7 +548,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     print('Train...')
     modelPre.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
                validation_data=(X_test_shuff, y_test_shuff))
-    modelPre.save_weights('models/tweet_classifier_' + iterid + '.h5')
+    modelPre.save_weights('cnngru/models/tweet_classifier_' + iterid + '.h5')
 
     #
     #  CNN+V/CNN+W
@@ -675,7 +675,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                   batch_size=batch_size,
                   nb_epoch=nb_epoch,
                   validation_data=(X_dev_mid, y_dev_mid))
-    modelGRU.save_weights('models/gru_' + iterid + '.h5')
+    modelGRU.save_weights('cnngru/models/gru_' + iterid + '.h5')
 
     # Prediction for DEV set
     score, acc = modelGRU.evaluate(X_dev_mid, y_dev_mid, batch_size=batch_size)
@@ -714,21 +714,21 @@ gold_test = np.array(gold_test)
 print("\nResults")
 print("\nCNN+V")
 bootstrap(gold_test, np.array(predictions["cnnv"]))
-predfile = open('predictions/cnnv.pkl', 'wb')
+predfile = open('cnngru/predictions/cnnv.pkl', 'wb')
 pkl.dump(predictions["cnnv"], predfile)
 predfile.close()
 print("\nCNN+W")
 bootstrap(gold_test, np.array(predictions["cnnw"]))
-predfile = open('predictions/cnnw.pkl', 'wb')
+predfile = open('cnngru/predictions/cnnw.pkl', 'wb')
 pkl.dump(predictions["cnnw"], predfile)
 predfile.close()
 print("\nGRU+V")
 bootstrap(gold_test, np.array(predictions["gruv"]))
-predfile = open('predictions/gruv.pkl', 'wb')
+predfile = open('cnngru/predictions/gruv.pkl', 'wb')
 pkl.dump(predictions["gruv"], predfile)
 predfile.close()
 print("\nGRU+W")
 bootstrap(gold_test, np.array(predictions["gruw"]))
-predfile = open('predictions/gruw.pkl', 'wb')
+predfile = open('cnngru/predictions/gruw.pkl', 'wb')
 pkl.dump(predictions["gruw"], predfile)
 predfile.close()
