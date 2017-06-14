@@ -12,7 +12,7 @@ import numpy as np
 np.random.seed(947) # for reproducibility
 import pickle as pkl
 import sys
-import osm
+import os
 
 from keras.preprocessing import sequence
 from keras.models import Sequential
