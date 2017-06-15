@@ -515,28 +515,28 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     gold_dev = y_dev.flatten()
     gold_test.extend(y_test.flatten())
 
-    if (os.path.isfile('cnngru/predictions/cnnv_fold' + iterid + '.pkl') and 
-        os.path.isfile('cnngru/predictions/cnnw_fold' + iterid + '.pkl') and
-        os.path.isfile('cnngru/predictions/gruv_fold' + iterid + '.pkl') and 
-        os.path.isfile('cnngru/predictions/gruw_fold' + iterid + '.pkl')):
+    if (os.path.isfile('cnngru/predictions/cnnv_' + iterid + '.pkl') and 
+        os.path.isfile('cnngru/predictions/cnnw_' + iterid + '.pkl') and
+        os.path.isfile('cnngru/predictions/gruv_' + iterid + '.pkl') and 
+        os.path.isfile('cnngru/predictions/gruw_' + iterid + '.pkl')):
         print('Loading cnn prediction files...')
-        predfile = open('cnngru/predictions/cnnv_fold' + iterid + '.pkl', 'rb')
+        predfile = open('cnngru/predictions/cnnv_' + iterid + '.pkl', 'rb')
         predTestmn = pkl.load(predfile)
         predictions["cnnv"].extend(predTestmn)
         predfile.close()
         
-        predfile = open('cnngru/predictions/cnnw_fold' + iterid + '.pkl', 'rb')
+        predfile = open('cnngru/predictions/cnnw_' + iterid + '.pkl', 'rb')
         predTestwm = pkl.load(predfile)
         predictions["cnnw"].extend(predTestwm)
         predfile.close()
         
         print('Loading gru prediction files...')
-        predfile = open('cnngru/predictions/gruv_fold' + iterid + '.pkl', 'rb')
+        predfile = open('cnngru/predictions/gruv_' + iterid + '.pkl', 'rb')
         predTestmn = pkl.load(predfile)
         predictions["gruv"].extend(predTestmn)
         predfile.close()
         
-        predfile = open('cnngru/predictions/gruw_fold' + iterid + '.pkl', 'rb')
+        predfile = open('cnngru/predictions/gruw_' + iterid + '.pkl', 'rb')
         predTestwm = pkl.load(predfile)
         predictions["gruw"].extend(predTestwm)
         predfile.close()
@@ -571,28 +571,28 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         modelPre.summary()
 
         # Train or load the model
-        if (os.path.isfile('cnngru/models/tweet_classifier_fold' + iterid + '.h5')):
+        if (os.path.isfile('cnngru/models/tweet_classifier_' + iterid + '.h5')):
             print('Loading model weights...')
-            modelPre.load_weights('cnngru/models/tweet_classifier_fold' + iterid + '.h5')
+            modelPre.load_weights('cnngru/models/tweet_classifier_' + iterid + '.h5')
         else:
             print('Training...')
             modelPre.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
                        validation_data=(X_test_shuff, y_test_shuff))
-            modelPre.save_weights('cnngru/models/tweet_classifier_fold' + iterid + '.h5')
+            modelPre.save_weights('cnngru/models/tweet_classifier_' + iterid + '.h5')
     
         #
         #  CNN+V/CNN+W
         #
     
-        if (os.path.isfile('cnngru/predictions/cnnv_fold' + iterid + '.pkl') and 
-            os.path.isfile('cnngru/predictions/cnnw_fold' + iterid + '.pkl')):
+        if (os.path.isfile('cnngru/predictions/cnnv_' + iterid + '.pkl') and 
+            os.path.isfile('cnngru/predictions/cnnw_' + iterid + '.pkl')):
             print('Loading cnn prediction files...')
-            predfile = open('cnngru/predictions/cnnv_fold' + iterid + '.pkl', 'rb')
+            predfile = open('cnngru/predictions/cnnv_' + iterid + '.pkl', 'rb')
             predTestmn = pkl.load(predfile)
             predictions["cnnv"].extend(predTestmn)
             predfile.close()
             
-            predfile = open('cnngru/predictions/cnnw_fold' + iterid + '.pkl', 'rb')
+            predfile = open('cnngru/predictions/cnnw_' + iterid + '.pkl', 'rb')
             predTestwm = pkl.load(predfile)
             predictions["cnnw"].extend(predTestwm)
             predfile.close()
@@ -623,7 +623,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             predTestmn = np.mean(predTest, axis=1)
             predTestmn = (predTestmn >= thldmn).astype(int)
             predictions["cnnv"].extend(predTestmn)
-            predfile = open('cnngru/predictions/cnnv_fold' + iterid + '.pkl', 'wb')
+            predfile = open('cnngru/predictions/cnnv_' + iterid + '.pkl', 'wb')
             pkl.dump(predTestmn, predfile)
             predfile.close()
             
@@ -631,7 +631,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             predTestwm = np.average(predTest, axis=1, weights=wts)
             predTestwm = (predTestwm >= thldwm).astype(int)
             predictions["cnnw"].extend(predTestwm)
-            predfile = open('cnngru/predictions/cnnw_fold' + iterid + '.pkl', 'wb')
+            predfile = open('cnngru/predictions/cnnw_' + iterid + '.pkl', 'wb')
             pkl.dump(predTestwm, predfile)
             predfile.close()
         
@@ -718,9 +718,9 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     
     
         # Train or Load the model
-        if (os.path.isfile('cnngru/models/gru_fold' + iterid + '.h5')):
+        if (os.path.isfile('cnngru/models/gru_' + iterid + '.h5')):
             print('Loading model weights...')
-            modelGRU.load_weights('cnngru/models/gru_fold' + iterid + '.h5')
+            modelGRU.load_weights('cnngru/models/gru_' + iterid + '.h5')
         else:
             print('Training...')
             modelGRU.fit(X_train_mid,
@@ -728,7 +728,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                          batch_size=batch_size,
                          nb_epoch=nb_epoch,
                          validation_data=(X_dev_mid, y_dev_mid))
-            modelGRU.save_weights('cnngru/models/gru_fold' + iterid + '.h5')
+            modelGRU.save_weights('cnngru/models/gru_' + iterid + '.h5')
     
         # Prediction for DEV set
         score, acc = modelGRU.evaluate(X_dev_mid, y_dev_mid, batch_size=batch_size)
@@ -756,7 +756,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         predTestmn = np.mean(predTest, axis=1)
         predTestmn = (predTestmn >= thldmn).astype(int)
         predictions["gruv"].extend(predTestmn)
-        predfile = open('cnngru/predictions/gruv_fold' + iterid + '.pkl', 'wb')
+        predfile = open('cnngru/predictions/gruv_' + iterid + '.pkl', 'wb')
         pkl.dump(predTestmn, predfile)
         predfile.close()
     
@@ -764,7 +764,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         predTestwm = np.average(predTest, axis=1, weights=wts)
         predTestwm = (predTestwm >= thldwm).astype(int)
         predictions["gruw"].extend(predTestwm)
-        predfile = open('cnngru/predictions/gruw_fold' + iterid + '.pkl', 'wb')
+        predfile = open('cnngru/predictions/gruw_' + iterid + '.pkl', 'wb')
         pkl.dump(predTestwm, predfile)
         predfile.close()
 
