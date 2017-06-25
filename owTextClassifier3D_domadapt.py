@@ -6,6 +6,7 @@
 # NN models to classify Twitter account users as Overweight or Not Overweight.
 # 
 #
+CUDA_MODE = False
 
 import gzip
 import numpy as np
@@ -521,6 +522,7 @@ def get_threshold(gold, pred):
 def new_outs_lengths(input_lenght, kernel_size, padding=0, dilation=1, stride=1):
     return np.floor((input_lenght + 2*padding - dilation*(kernel_size-1) -1) / stride + 1)
         
+    
 class Pre(nn.Module):
     def __init__(self, max_features, embedding_dim, seq_length, nb_filter, filter_length, pool_length, hidden_size):
         super(Pre, self).__init__()
@@ -580,16 +582,23 @@ class Pre(nn.Module):
         
 def predict(net, x, f, intermediate=False):
     fb = torch.LongTensor(torch.np.where(f[:,0]==0)[0])
+    if CUDA_MODE:
+        fb = fb.cuda()
     xf = x[fb]
     xf = torch.transpose(xf, 0, 1)
     mb = torch.LongTensor(torch.np.where(f[:,0]==1)[0])
+    if CUDA_MODE:
+        mb = mb.cuda()
     xm = x[mb]
     xm = torch.transpose(xm, 0, 1)
     f_pred = net(xf, domain=0)
     m_pred = net(xm, domain=1)
     fb = fb + 5
     b = torch.cat((fb, mb))
-    b = torch.LongTensor(torch.np.argsort(b.numpy()))
+    if CUDA_MODE:
+        b = torch.LongTensor(torch.np.argsort(b.gpu().numpy())).cuda()
+    else:
+        b = torch.LongTensor(torch.np.argsort(b.numpy()))    
     pred = torch.cat((f_pred, m_pred))
     pred = pred[b]
     return pred
@@ -607,11 +616,15 @@ def train(net, x, y, f, nepochs, batch_size):
             bf = f[b*batch_size:b*batch_size+batch_size]
             
             fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
+            if CUDA_MODE:
+                fb = fb.cuda()
             bxf = bx[fb]
             byf = by[fb]
             bxf = torch.transpose(bxf, 0, 1)
 
             mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
+            if CUDA_MODE:
+                mb = mb.cuda()
             bxm = bx[mb]
             bym = by[mb]
             bxm = torch.transpose(bxm, 0, 1)
@@ -681,8 +694,12 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     print('Build first model (tweet-level)...')
     net = Pre(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128)
     net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
-    data_x = Variable(torch.from_numpy(X_train_shuff).long())
-    data_y = Variable(torch.from_numpy(y_train_shuff).float())
+    if CUDA_MODE:
+        data_x = Variable(torch.from_numpy(X_train_shuff).long().cuda())
+        data_y = Variable(torch.from_numpy(y_train_shuff).float().cuda())
+    else:
+        data_x = Variable(torch.from_numpy(X_train_shuff).long())        
+        data_y = Variable(torch.from_numpy(y_train_shuff).float())
     data_f = f_train_shuff
     
     print('Train...')
@@ -705,12 +722,18 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
 #    predDev = modelPre.predict(X_dev_flat)
 #    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
-    data_x = Variable(torch.from_numpy(X_dev_flat).long())
+    if CUDA_MODE:
+        data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda())
+    else:
+        data_x = Variable(torch.from_numpy(X_dev_flat).long())
     data_f = f_dev_flat
     
     predDev = predict(net, data_x, data_f)
-    predDev = predDev.data.numpy().reshape((dev_shp[0], dev_shp[1]))
-
+    if CUDA_MODE:
+        predDev = predDev.cpu().data.numpy().reshape((dev_shp[0], dev_shp[1]))
+    else:    
+        predDev = predDev.data.numpy().reshape((dev_shp[0], dev_shp[1]))
+        
     predDevmn = np.mean(predDev, axis=1)
     print('Search CNN+V threshold')
     thldmn = get_threshold(gold_dev, predDevmn)
@@ -727,11 +750,16 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
 #    predTest = modelPre.predict(X_test_flat)
 #    predTest = predTest.reshape((test_shp[0], test_shp[1]))
 
-    data_x = Variable(torch.from_numpy(X_test_flat).long())
+    if CUDA_MODE:
+        data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
+    else:
+        data_x = Variable(torch.from_numpy(X_test_flat).long())
     data_f = f_test_flat
     predTest = predict(net, data_x, data_f)
-    predTest = predTest.data.numpy().reshape((test_shp[0], test_shp[1]))    
-
+    if CUDA_MODE:
+        predTest = predTest.cpu().data.numpy().reshape((test_shp[0], test_shp[1]))
+    else:
+        predTest = predTest.data.numpy().reshape((test_shp[0], test_shp[1]))
     predTestmn = np.mean(predTest, axis=1)
     predTestmn = (predTestmn >= thldmn).astype(int)
     predictions["cnnv"].extend(predTestmn)
