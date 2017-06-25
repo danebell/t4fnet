@@ -583,7 +583,6 @@ def predict(net, x, f, intermediate=False):
     xf = x[fb]
     xf = torch.transpose(xf, 0, 1)
     mb = torch.LongTensor(torch.np.where(f[:,0]==1)[0])
-    mb = fb
     xm = x[mb]
     xm = torch.transpose(xm, 0, 1)
     f_pred = net(xf, domain=0)
@@ -593,7 +592,6 @@ def predict(net, x, f, intermediate=False):
     b = torch.LongTensor(torch.np.argsort(b.numpy()))
     pred = torch.cat((f_pred, m_pred))
     pred = pred[b]
-    sys.exit()
     return pred
     
 def train(net, x, y, f, nepochs, batch_size):
