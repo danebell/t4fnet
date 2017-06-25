@@ -128,6 +128,8 @@ def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
     np.random.shuffle(y_pos)
     np.random.seed(seed)
     np.random.shuffle(i_pos)
+    np.random.seed(seed)
+    np.random.shuffle(f_pos)
 
     np.random.seed(seed * 2)
     np.random.shuffle(x_neg)
@@ -135,7 +137,10 @@ def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
     np.random.shuffle(y_neg)
     np.random.seed(seed * 2)
     np.random.shuffle(i_neg)
+    np.random.seed(seed * 2)
+    np.random.shuffle(f_neg)
 
+    
     # keep maxlen words of each tweet
     if maxlen is not None:
         x_pos = cap_length(x_pos, maxlen)
@@ -158,12 +163,14 @@ def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
     x_pos = np.array(x_pos)
     y_pos = np.array(y_pos)
     i_pos = np.array(i_pos)
+    f_pos = np.array(f_pos)
 
     x_neg = np.array(x_neg)
     y_neg = np.array(y_neg)
     i_neg = np.array(i_neg)
+    f_neg = np.array(f_neg)
     
-    return (x_pos, y_pos, i_pos), (x_neg, y_neg, i_neg)
+    return (x_pos, y_pos, i_pos, f_pos), (x_neg, y_neg, i_neg, f_neg)
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
@@ -226,15 +233,17 @@ def load_folds(file, seed=113):
     f.close()
     return folds
 
-def shuffle_in_unison(a, b):
-    assert len(a) == len(b)
+def shuffle_in_unison(a, b, c):
+    assert len(a) == len(b) == len(c)
     shuffled_a = np.empty(a.shape, dtype=a.dtype)
     shuffled_b = np.empty(b.shape, dtype=b.dtype)
+    shuffled_c = np.empty(c.shape, dtype=c.dtype)
     permutation = np.random.permutation(len(a))
     for old_index, new_index in enumerate(permutation):
         shuffled_a[new_index] = a[old_index]
         shuffled_b[new_index] = b[old_index]
-    return shuffled_a, shuffled_b
+        shuffled_c[new_index] = c[old_index]
+    return shuffled_a, shuffled_b, shuffled_c
 
 def bootstrap(gold, pred, reps=100000, printit=True):
     '''
@@ -361,25 +370,30 @@ def bootstrap(gold, pred, reps=100000, printit=True):
 
 
 def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
-    (x_pos, y_pos, i_pos), (x_neg, y_neg, i_neg) = pos, neg
+    (x_pos, y_pos, i_pos, f_pos), (x_neg, y_neg, i_neg, f_neg) = pos, neg
 
     folds = load_folds(foldsfile)
     for itern in range(0, len(folds)):
         X_train = list()
         y_train = list()
+        f_train = list()
         X_test = list()
         y_test = list()
+        f_test = list()
         X_dev = list()
         y_dev = list()
+        f_dev = list()
         for user in folds[itern]:
             if user[1] == "Overweight":
                 position = np.where(i_pos == user[0])[0][0]
                 X_test.append(x_pos[position])
                 y_test.append(y_pos[position])
+                f_test.append(f_pos[position])
             else:
                 position = np.where(i_neg == user[0])[0][0]
                 X_test.append(x_neg[position])
                 y_test.append(y_neg[position])
+                f_test.append(f_neg[position])
         nitern = itern + 1
         if nitern == len(folds):
             nitern = 0
@@ -388,10 +402,12 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
                 position = np.where(i_pos == user[0])[0][0]
                 X_dev.append(x_pos[position])
                 y_dev.append(y_pos[position])
+                f_dev.append(f_pos[position])
             else:
                 position = np.where(i_neg == user[0])[0][0]
                 X_dev.append(x_neg[position])
                 y_dev.append(y_neg[position])
+                f_dev.append(f_neg[position])
         for j in range(0, len(folds)):
             if itern != j and nitern != j:
                 for user in folds[j]:
@@ -399,17 +415,22 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
                         position = np.where(i_pos == user[0])[0][0]
                         X_train.append(x_pos[position])
                         y_train.append(y_pos[position])
+                        f_train.append(f_pos[position])
                     else:
                         position = np.where(i_neg == user[0])[0][0]
                         X_train.append(x_neg[position])
                         y_train.append(y_neg[position])
+                        f_train.append(f_neg[position])
         
         X_train = np.array(X_train)
         y_train = np.array(y_train)
+        f_train = np.array(f_train)
         X_test = np.array(X_test)
         y_test = np.array(y_test)
+        f_test = np.array(f_test)
         X_dev = np.array(X_dev)
         y_dev = np.array(y_dev)
+        f_dev = np.array(f_dev)
 
 #        X_train = X_train[:10]
 #        y_train = y_train[:10]
@@ -433,18 +454,21 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
 
         X_train_flat = X_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
         y_train_flat = y_train.repeat(train_shp[1])
-        X_train_shuff, y_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat)
+        f_train_flat = f_train.repeat(train_shp[1], axis=0)
+        X_train_shuff, y_train_shuff, f_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat, f_train_flat)
 
         X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
         y_test_flat = y_test.repeat(test_shp[1])
+        f_test_flat = f_test.repeat(test_shp[1], axis=0)
 
         X_dev_flat = X_dev.reshape(dev_shp[0] * dev_shp[1], dev_shp[2])
         y_dev_flat = y_dev.repeat(dev_shp[1])
+        f_dev_flat = f_dev.repeat(dev_shp[1], axis=0)
         
         # We shuffle the flattened reps. for better training
         # (but keep the original order for our by-account classification)
-        X_test_shuff, y_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat)
-        X_dev_shuff, y_dev_shuff = shuffle_in_unison(X_dev_flat, y_dev_flat)
+        X_test_shuff, y_test_shuff, f_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat, f_test_flat)
+        X_dev_shuff, y_dev_shuff, f_dev_shuff = shuffle_in_unison(X_dev_flat, y_dev_flat, f_dev_flat)
 
         # just clearing up space -- from now on, we use the flattened representations
         del X_train
@@ -453,9 +477,12 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
         
         iteration = list()
         iteration.append('fold' + str(itern))
-        iteration.append((X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp))
-        iteration.append((X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp))
-        iteration.append((X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff, dev_shp))
+        iteration.append((X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, 
+                          f_train, f_train_flat, f_train_shuff, train_shp))
+        iteration.append((X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff,
+                          f_test, f_test_flat, f_test_shuff, test_shp))
+        iteration.append((X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff,
+                          f_dev, f_dev_flat, f_dev_shuff, dev_shp))
         yield iteration
         
 
@@ -500,32 +527,76 @@ class Pre(nn.Module):
         cnn_out_length = new_outs_lengths(seq_length, filter_length)
         pool_out_length = new_outs_lengths(cnn_out_length, pool_length, stride=pool_length)
         self.embs = nn.Embedding(max_features + 3, embedding_dim)
-        self.cnn = nn.Conv1d(embedding_dim, nb_filter, filter_length)
-        self.pool = nn.MaxPool1d(pool_length)        
-        self.linear1 = nn.Linear(int(pool_out_length) * nb_filter, hidden_size)
-        self.relu1 = nn.ReLU()
+        # Common 
+        self.c_cnn = nn.Conv1d(embedding_dim, nb_filter, filter_length)
+        self.c_pool = nn.MaxPool1d(pool_length)        
+        self.c_linear1 = nn.Linear(int(pool_out_length) * nb_filter, hidden_size)
+        self.c_relu1 = nn.ReLU()
+        # Female
+        self.f_cnn = nn.Conv1d(embedding_dim, nb_filter, filter_length)
+        self.f_pool = nn.MaxPool1d(pool_length)        
+        self.f_linear1 = nn.Linear(int(pool_out_length) * nb_filter, hidden_size)
+        self.f_relu1 = nn.ReLU()
+        # Male
+        self.m_cnn = nn.Conv1d(embedding_dim, nb_filter, filter_length)
+        self.m_pool = nn.MaxPool1d(pool_length)        
+        self.m_linear1 = nn.Linear(int(pool_out_length) * nb_filter, hidden_size)
+        self.m_relu1 = nn.ReLU()
+        # Top
         self.dropout1 = nn.Dropout(p=0.4)
         self.linear2 = nn.Linear(hidden_size, 1)
+        self.linear2_domadapt = nn.Linear(hidden_size*2, 1)
         self.sigmoid2 = nn.Sigmoid()
         
-    def forward(self, inputs, intermediate=False):
+    def forward(self, inputs, intermediate=False, domain=-1):
         embeds = self.embs(inputs)
         embeds = embeds.transpose(0, 1).transpose(1, 2)
-        out = self.cnn(embeds)
-        out = self.pool(out)
+        out = self.c_cnn(embeds)
+        out = self.c_pool(out)
         out = out.view((out.size()[0],out.size()[1] * out.size()[2]))
-        out = self.relu1(self.linear1(out))
-        if not intermediate:
-            out = self.dropout1(out)
-            out = self.sigmoid2(self.linear2(out))
+        out = self.c_relu1(self.c_linear1(out))
+        if domain == 0:
+            outf = self.f_cnn(embeds)
+            outf = self.f_pool(outf)
+            outf = outf.view((outf.size()[0],outf.size()[1] * outf.size()[2]))
+            outf = self.f_relu1(self.f_linear1(outf))
+            out = torch.cat((out,outf),1)
+        if domain == 1:
+            outm = self.m_cnn(embeds)
+            outm = self.m_pool(outm)
+            outm = outm.view((outm.size()[0],outm.size()[1] * outm.size()[2]))
+            outm = self.m_relu1(self.m_linear1(outm))
+            out = torch.cat((out,outm),1)
+        if domain == -1:
+            if not intermediate:
+                out = self.dropout1(out)
+                out = self.sigmoid2(self.linear2(out))
+        else:
+            if not intermediate:
+                out = self.dropout1(out)
+                out = self.sigmoid2(self.linear2_domadapt(out))
         return out
 
         
-def predict(net, x, intermediate=False):
-    x = torch.transpose(x, 0, 1)
-    return net(x,intermediate)
+def predict(net, x, f, intermediate=False):
+    fb = torch.LongTensor(torch.np.where(f[:,0]==0)[0])
+    xf = x[fb]
+    xf = torch.transpose(xf, 0, 1)
+    mb = torch.LongTensor(torch.np.where(f[:,0]==1)[0])
+    mb = fb
+    xm = x[mb]
+    xm = torch.transpose(xm, 0, 1)
+    f_pred = net(xf, domain=0)
+    m_pred = net(xm, domain=1)
+    fb = fb + 5
+    b = torch.cat((fb, mb))
+    b = torch.LongTensor(torch.np.argsort(b.numpy()))
+    pred = torch.cat((f_pred, m_pred))
+    pred = pred[b]
+    sys.exit()
+    return pred
     
-def train(net, x, y, nepochs, batch_size):
+def train(net, x, y, f, nepochs, batch_size):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(net.parameters())
     batches = math.ceil(x.size()[0] / batch_size)
@@ -535,16 +606,28 @@ def train(net, x, y, nepochs, batch_size):
             # Get minibatch samples
             bx = x[b*batch_size:b*batch_size+batch_size]
             by = y[b*batch_size:b*batch_size+batch_size]
-                        
-            bx = torch.transpose(bx, 0, 1)
+            bf = f[b*batch_size:b*batch_size+batch_size]
+            
+            fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
+            bxf = bx[fb]
+            byf = by[fb]
+            bxf = torch.transpose(bxf, 0, 1)
+
+            mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
+            bxm = bx[mb]
+            bym = by[mb]
+            bxm = torch.transpose(bxm, 0, 1)
             
             # Clear gradients
             net.zero_grad()
             
             # Forward pass
-            y_pred = net(bx)
-
+            yf_pred = net(bxf, domain=0)
+            ym_pred = net(bxm, domain=1)
+            
             # Compute loss
+            y_pred = torch.cat((yf_pred, ym_pred))
+            by = torch.cat((byf, bym))
             loss = criterion(y_pred, by)
 
             # Print loss
@@ -583,9 +666,12 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     iterid = iteration[0]
     print('')
     print('Iteration: %s' % iterid)
-    (X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp) = iteration[1]
-    (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[2]
-    (X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff, dev_shp) = iteration[3]
+    (X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff,
+     f_train, f_train_flat, f_train_shuff, train_shp) = iteration[1]
+    (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff,
+     f_test, f_test_flat, f_test_shuff, test_shp) = iteration[2]
+    (X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff,
+     f_dev, f_dev_flat, f_dev_shuff, dev_shp) = iteration[3]
     
     gold_dev = y_dev.flatten()
     gold_test.extend(y_test.flatten())
@@ -599,9 +685,10 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
     data_x = Variable(torch.from_numpy(X_train_shuff).long())
     data_y = Variable(torch.from_numpy(y_train_shuff).float())
-
+    data_f = f_train_shuff
+    
     print('Train...')
-    train(net, data_x, data_y, nb_epoch, batch_size)
+    train(net, data_x, data_y, data_f, nb_epoch, batch_size)
     torch.save(net.state_dict(), 'domadapt/models/tweet_classifier_' + iterid + '.pkl')
 
     
@@ -621,7 +708,9 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
 #    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
     data_x = Variable(torch.from_numpy(X_dev_flat).long())
-    predDev = predict(net, data_x)
+    data_f = f_dev_flat
+    
+    predDev = predict(net, data_x, data_f)
     predDev = predDev.data.numpy().reshape((dev_shp[0], dev_shp[1]))
 
     predDevmn = np.mean(predDev, axis=1)
@@ -641,7 +730,8 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
 #    predTest = predTest.reshape((test_shp[0], test_shp[1]))
 
     data_x = Variable(torch.from_numpy(X_test_flat).long())
-    predTest = predict(net, data_x)
+    data_f = f_test_flat
+    predTest = predict(net, data_x, data_f)
     predTest = predTest.data.numpy().reshape((test_shp[0], test_shp[1]))    
 
     predTestmn = np.mean(predTest, axis=1)
