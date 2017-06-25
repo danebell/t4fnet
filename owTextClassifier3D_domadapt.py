@@ -6,7 +6,7 @@
 # NN models to classify Twitter account users as Overweight or Not Overweight.
 # 
 #
-CUDA_MODE = False
+CUDA_MODE = True
 
 import gzip
 import numpy as np
@@ -84,8 +84,8 @@ def push_indices(x, start, index_from):
     else:
         return x
 
-#def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
-def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
+def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
@@ -175,8 +175,8 @@ def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    #vocab='ow3df.dict.pkl', 
-                    vocab='data_toy/ow3df.dict.pkl', 
+                    vocab='ow3df.dict.pkl', 
+                    #vocab='data_toy/ow3df.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
@@ -596,7 +596,7 @@ def predict(net, x, f, intermediate=False):
     fb = fb + 5
     b = torch.cat((fb, mb))
     if CUDA_MODE:
-        b = torch.LongTensor(torch.np.argsort(b.gpu().numpy())).cuda()
+        b = torch.LongTensor(torch.np.argsort(b.cpu().numpy())).cuda()
     else:
         b = torch.LongTensor(torch.np.argsort(b.numpy()))    
     pred = torch.cat((f_pred, m_pred))
@@ -643,7 +643,7 @@ def train(net, x, y, f, nepochs, batch_size):
 
             # Print loss
             running_loss += loss.data[0]
-            sys.stdout.write('\r[epoch: %3d, batch: %3d] loss: %.3f' % (e + 1, b + 1, running_loss / (b+1)))
+            sys.stdout.write('\r[epoch: %3d, batch: %3d/%3d] loss: %.3f' % (e + 1, b + 1, batches, running_loss / (b+1)))
             sys.stdout.flush()
 
             # Backward propagation and update the weights.
@@ -671,8 +671,8 @@ predictions["cnnw"] = list()
 predictions["gruv"] = list()
 predictions["gruw"] = list()
 gold_test = list()
-#foldsfile = "folds.csv"
-foldsfile = "data_toy/folds.csv"
+foldsfile = "folds.csv"
+#foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
     print('')
@@ -695,6 +695,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     net = Pre(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128)
     net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
     if CUDA_MODE:
+        net = net.cuda()
         data_x = Variable(torch.from_numpy(X_train_shuff).long().cuda())
         data_y = Variable(torch.from_numpy(y_train_shuff).float().cuda())
     else:
