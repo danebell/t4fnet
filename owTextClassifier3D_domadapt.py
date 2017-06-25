@@ -214,9 +214,10 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
 
 def load_folds(file, seed=113):
     print ("Loading folds...")
-    folds = list(list() for i in range(10))
     f = open(file, 'r')
     lines = f.readlines()
+    last_fold = np.max([int(l.split(',')[0]) for l in lines])
+    folds = list(list() for i in range(last_fold + 1))
     np.random.seed(seed)
     np.random.shuffle(lines)
     for line in lines:
@@ -380,7 +381,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
                 X_test.append(x_neg[position])
                 y_test.append(y_neg[position])
         nitern = itern + 1
-        if nitern > len(folds):
+        if nitern == len(folds):
             nitern = 0
         for user in folds[nitern]:
             if user[1] == "Overweight":
@@ -402,6 +403,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
                         position = np.where(i_neg == user[0])[0][0]
                         X_train.append(x_neg[position])
                         y_train.append(y_neg[position])
+        
         X_train = np.array(X_train)
         y_train = np.array(y_train)
         X_test = np.array(X_test)
@@ -455,8 +457,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
         iteration.append((X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp))
         iteration.append((X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff, dev_shp))
         yield iteration
-
-
+        
 
 def get_threshold(gold, pred):
     maxth = 0.
