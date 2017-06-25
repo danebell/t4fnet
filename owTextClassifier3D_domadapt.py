@@ -15,11 +15,11 @@ import sys
 import math
 
 from keras.preprocessing import sequence
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Embedding, TimeDistributed
-from keras.layers import GRU
-from keras.layers import Convolution1D, MaxPooling1D, Flatten
-from keras.layers.core import K
+#from keras.models import Sequential
+#from keras.layers import Dense, Dropout, Activation, Embedding, TimeDistributed
+#from keras.layers import GRU
+#from keras.layers import Convolution1D, MaxPooling1D, Flatten
+#from keras.layers.core import K
 
 import torch
 import torch.nn as nn
@@ -380,7 +380,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
                 X_test.append(x_neg[position])
                 y_test.append(y_neg[position])
         nitern = itern + 1
-        if nitern == 10:
+        if nitern > len(folds):
             nitern = 0
         for user in folds[nitern]:
             if user[1] == "Overweight":
