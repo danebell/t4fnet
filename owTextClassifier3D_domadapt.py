@@ -714,6 +714,7 @@ pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
+domain = False
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen)
 predictions = dict()
@@ -755,7 +756,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     data_f = f_train_shuff
     
     print('Train...')
-    train(net, data_x, data_y, data_f, nb_epoch, batch_size)
+    train(net, data_x, data_y, data_f, nb_epoch, batch_size, domain=domain)
     torch.save(net.state_dict(), 'domadapt/models/tweet_classifier_' + iterid + '.pkl')
 
     
@@ -781,7 +782,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         data_x = Variable(torch.from_numpy(X_dev_flat).long())
     data_f = f_dev_flat
     
-    predDev = predict(net, data_x, data_f, predict_batch_size)
+    predDev = predict(net, data_x, data_f, predict_batch_size, domain=domain)
     predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
         
     predDevmn = np.mean(predDev, axis=1)
@@ -806,7 +807,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     else:
         data_x = Variable(torch.from_numpy(X_test_flat).long())
     data_f = f_test_flat
-    predTest = predict(net, data_x, data_f, predict_batch_size)
+    predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain)
     predTest = predTest.reshape((test_shp[0], test_shp[1]))
 
     predTestmn = np.mean(predTest, axis=1)
