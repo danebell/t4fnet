@@ -580,51 +580,57 @@ class Pre(nn.Module):
         return out
 
         
-def predict(net, x, f, batch_size, intermediate=False):
+def predict(net, x, f, batch_size, intermediate=False, domain=False):
     pred = np.empty(0)
     batches = math.ceil(x.size()[0] / batch_size)
     for b in range(batches):
         bx = x[b*batch_size:b*batch_size+batch_size]
         bf = f[b*batch_size:b*batch_size+batch_size]
 
-        fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
-        if CUDA_MODE:
-            fb = fb.cuda()
-            f_pred = Variable(torch.LongTensor().cuda())
+        if domain:
+            fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
+            if CUDA_MODE:
+                fb = fb.cuda()
+                f_pred = Variable(torch.LongTensor().cuda())
+            else:
+                f_pred = Variable(torch.LongTensor())
+            if fb.dim() > 0:
+                bxf = bx[fb]
+                bxf = torch.transpose(bxf, 0, 1)
+                f_pred = net(bxf, domain=0)
+            
+            mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
+            if CUDA_MODE:
+                mb = mb.cuda()
+                m_pred = Variable(torch.LongTensor().cuda())
+            else:
+                m_pred = Variable(torch.LongTensor())
+            if mb.dim() > 0:
+                bxm = bx[mb]
+                bxm = torch.transpose(bxm, 0, 1)
+                m_pred = net(bxm, domain=1)
+    
+            if fb.dim() > 0 and mb.dim() > 0:
+                cb = torch.cat((fb, mb))
+                b_pred = torch.cat((f_pred, m_pred))
+            elif fb.dim() > 0:
+                cb = fb
+                b_pred = f_pred
+            else:
+                cb = mb
+                b_pred = m_pred
+    
+            if CUDA_MODE:
+                cb = torch.LongTensor(torch.np.argsort(cb.cpu().numpy())).cuda()
+            else:
+                cb = torch.LongTensor(torch.np.argsort(cb.numpy()))    
+    
+            b_pred = b_pred[cb]
+            
         else:
-            f_pred = Variable(torch.LongTensor())
-        if fb.dim() > 0:
-            bxf = bx[fb]
-            bxf = torch.transpose(bxf, 0, 1)
-            f_pred = net(bxf, domain=0)
-        
-        mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
-        if CUDA_MODE:
-            mb = mb.cuda()
-            m_pred = Variable(torch.LongTensor().cuda())
-        else:
-            m_pred = Variable(torch.LongTensor())
-        if mb.dim() > 0:
-            bxm = bx[mb]
-            bxm = torch.transpose(bxm, 0, 1)
-            m_pred = net(bxm, domain=1)
-
-        if fb.dim() > 0 and mb.dim() > 0:
-            cb = torch.cat((fb, mb))
-            b_pred = torch.cat((f_pred, m_pred))
-        elif fb.dim() > 0:
-            cb = fb
-            b_pred = f_pred
-        else:
-            cb = mb
-            b_pred = m_pred
-
-        if CUDA_MODE:
-            cb = torch.LongTensor(torch.np.argsort(cb.cpu().numpy())).cuda()
-        else:
-            cb = torch.LongTensor(torch.np.argsort(cb.numpy()))    
-
-        b_pred = b_pred[cb]
+            bx = torch.transpose(bx, 0, 1)
+            b_pred = net(bx)
+                        
         sys.stdout.write('\r[batch: %3d/%3d]' % (b + 1, batches))
         sys.stdout.flush()
         if CUDA_MODE:     
@@ -635,7 +641,7 @@ def predict(net, x, f, batch_size, intermediate=False):
     sys.stdout.flush()
     return pred
     
-def train(net, x, y, f, nepochs, batch_size):
+def train(net, x, y, f, nepochs, batch_size, domain=False):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(net.parameters())
     batches = math.ceil(x.size()[0] / batch_size)
@@ -645,32 +651,44 @@ def train(net, x, y, f, nepochs, batch_size):
             # Get minibatch samples
             bx = x[b*batch_size:b*batch_size+batch_size]
             by = y[b*batch_size:b*batch_size+batch_size]
-            bf = f[b*batch_size:b*batch_size+batch_size]
             
-            fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
-            if CUDA_MODE:
-                fb = fb.cuda()
-            bxf = bx[fb]
-            byf = by[fb]
-            bxf = torch.transpose(bxf, 0, 1)
+            if domain:
+                bf = f[b*batch_size:b*batch_size+batch_size]
+                
+                fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
+                if CUDA_MODE:
+                    fb = fb.cuda()
+                bxf = bx[fb]
+                byf = by[fb]
+                bxf = torch.transpose(bxf, 0, 1)
+    
+                mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
+                if CUDA_MODE:
+                    mb = mb.cuda()
+                bxm = bx[mb]
+                bym = by[mb]
+                bxm = torch.transpose(bxm, 0, 1)
+                
+                # Clear gradients
+                net.zero_grad()
+                
+                # Forward pass
+                yf_pred = net(bxf, domain=0)
+                ym_pred = net(bxm, domain=1)
 
-            mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
-            if CUDA_MODE:
-                mb = mb.cuda()
-            bxm = bx[mb]
-            bym = by[mb]
-            bxm = torch.transpose(bxm, 0, 1)
-            
-            # Clear gradients
-            net.zero_grad()
-            
-            # Forward pass
-            yf_pred = net(bxf, domain=0)
-            ym_pred = net(bxm, domain=1)
-            
+                by = torch.cat((byf, bym))                
+                y_pred = torch.cat((yf_pred, ym_pred))
+                
+            else:
+                bx = torch.transpose(bx, 0, 1)
+                
+                # Clear gradients
+                net.zero_grad()
+                
+                # Forward pass
+                y_pred = net(bx)
+                
             # Compute loss
-            y_pred = torch.cat((yf_pred, ym_pred))
-            by = torch.cat((byf, bym))
             loss = criterion(y_pred, by)
 
             # Print loss
