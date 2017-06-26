@@ -6,7 +6,7 @@
 # NN models to classify Twitter account users as Overweight or Not Overweight.
 # 
 #
-CUDA_MODE = False
+CUDA_MODE = True
 
 import gzip
 import numpy as np
@@ -84,8 +84,8 @@ def push_indices(x, start, index_from):
     else:
         return x
 
-#def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
-def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
+def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
@@ -175,8 +175,8 @@ def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    #vocab='ow3df.dict.pkl', 
-                    vocab='data_toy/ow3df.dict.pkl', 
+                    vocab='ow3df.dict.pkl', 
+                    #vocab='data_toy/ow3df.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
@@ -581,33 +581,58 @@ class Pre(nn.Module):
 
         
 def predict(net, x, f, batch_size, intermediate=False):
-    pred = torch.LongTensor()
+    pred = np.empty(0)
     batches = math.ceil(x.size()[0] / batch_size)
     for b in range(batches):
         bx = x[b*batch_size:b*batch_size+batch_size]
-        fb = torch.LongTensor(torch.np.where(f[:,0]==0)[0])
+        bf = f[b*batch_size:b*batch_size+batch_size]
+
+        fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
         if CUDA_MODE:
             fb = fb.cuda()
-        bxf = x[fb]
-        bxf = torch.transpose(bxf, 0, 1)
-        mb = torch.LongTensor(torch.np.where(f[:,0]==1)[0])
+            f_pred = Variable(torch.LongTensor().cuda())
+        else:
+            f_pred = Variable(torch.LongTensor())
+        if fb.dim() > 0:
+            bxf = bx[fb]
+            bxf = torch.transpose(bxf, 0, 1)
+            f_pred = net(bxf, domain=0)
+        
+        mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
         if CUDA_MODE:
             mb = mb.cuda()
-        bxm = bx[mb]
-        bxm = torch.transpose(bxm, 0, 1)
-        f_pred = net(bxf, domain=0)
-        m_pred = net(bxm, domain=1)
-        fb = fb + 5
-        cb = torch.cat((fb, mb))
+            m_pred = Variable(torch.LongTensor().cuda())
+        else:
+            m_pred = Variable(torch.LongTensor())
+        if mb.dim() > 0:
+            bxm = bx[mb]
+            bxm = torch.transpose(bxm, 0, 1)
+            m_pred = net(bxm, domain=1)
+
+        if fb.dim() > 0 and mb.dim() > 0:
+            cb = torch.cat((fb, mb))
+            b_pred = torch.cat((f_pred, m_pred))
+        elif fb.dim() > 0:
+            cb = fb
+            b_pred = f_pred
+        else:
+            cb = mb
+            b_pred = m_pred
+
         if CUDA_MODE:
             cb = torch.LongTensor(torch.np.argsort(cb.cpu().numpy())).cuda()
         else:
             cb = torch.LongTensor(torch.np.argsort(cb.numpy()))    
-        b_pred = torch.cat((f_pred, m_pred))
+
         b_pred = b_pred[cb]
-        sys.stdout.write('\r[Predict batch: %3d/%3d]' % (b + 1, batches))
+        sys.stdout.write('\r[batch: %3d/%3d]' % (b + 1, batches))
         sys.stdout.flush()
-        pred = torch.cat(pred, b_pred)
+        if CUDA_MODE:     
+            pred = np.concatenate((pred, b_pred.cpu().data.numpy().flatten()))
+        else:
+            pred = np.concatenate((pred, b_pred.data.numpy().flatten()))
+    sys.stdout.write('\n')
+    sys.stdout.flush()
     return pred
     
 def train(net, x, y, f, nepochs, batch_size):
@@ -670,6 +695,7 @@ filter_length = 5 # how many tokens a convolution covers
 pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
+predict_batch_size = 612
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen)
 predictions = dict()
@@ -678,8 +704,8 @@ predictions["cnnw"] = list()
 predictions["gruv"] = list()
 predictions["gruw"] = list()
 gold_test = list()
-#foldsfile = "folds.csv"
-foldsfile = "data_toy/folds.csv"
+foldsfile = "folds.csv"
+#foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
     print('')
@@ -730,17 +756,15 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
 #    predDev = modelPre.predict(X_dev_flat)
 #    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
+    print('Dev...')
     if CUDA_MODE:
         data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda())
     else:
         data_x = Variable(torch.from_numpy(X_dev_flat).long())
     data_f = f_dev_flat
     
-    predDev = predict(net, data_x, data_f, batch_size)
-    if CUDA_MODE:
-        predDev = predDev.cpu().data.numpy().reshape((dev_shp[0], dev_shp[1]))
-    else:    
-        predDev = predDev.data.numpy().reshape((dev_shp[0], dev_shp[1]))
+    predDev = predict(net, data_x, data_f, predict_batch_size)
+    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
         
     predDevmn = np.mean(predDev, axis=1)
     print('Search CNN+V threshold')
@@ -758,16 +782,15 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
 #    predTest = modelPre.predict(X_test_flat)
 #    predTest = predTest.reshape((test_shp[0], test_shp[1]))
 
+    print('Test...')
     if CUDA_MODE:
         data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
     else:
         data_x = Variable(torch.from_numpy(X_test_flat).long())
     data_f = f_test_flat
-    predTest = predict(net, data_x, data_f, batch_size)
-    if CUDA_MODE:
-        predTest = predTest.cpu().data.numpy().reshape((test_shp[0], test_shp[1]))
-    else:
-        predTest = predTest.data.numpy().reshape((test_shp[0], test_shp[1]))
+    predTest = predict(net, data_x, data_f, predict_batch_size)
+    predTest = predTest.reshape((test_shp[0], test_shp[1]))
+
     predTestmn = np.mean(predTest, axis=1)
     predTestmn = (predTestmn >= thldmn).astype(int)
     predictions["cnnv"].extend(predTestmn)
