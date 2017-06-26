@@ -739,182 +739,192 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     gold_dev = y_dev.flatten()
     gold_test.extend(y_test.flatten())
 
-    #
-    # Pre-train tweet-level vectors
-    #
-
-    print('Build first model (tweet-level)...')
-    net = Pre(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128)
-    net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
-    if CUDA_MODE:
-        net = net.cuda()
-        data_x = Variable(torch.from_numpy(X_train_shuff).long().cuda())
-        data_y = Variable(torch.from_numpy(y_train_shuff).float().cuda())
-    else:
-        data_x = Variable(torch.from_numpy(X_train_shuff).long())        
-        data_y = Variable(torch.from_numpy(y_train_shuff).float())
-    data_f = f_train_shuff
-    
-    print('Train...')
-    train(net, data_x, data_y, data_f, nb_epoch, batch_size, domain=domain)
-    torch.save(net.state_dict(), 'domadapt/models/tweet_classifier_' + iterid + '.pkl')
-
-    
-#    modelPre.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
-#               validation_data=(X_test_shuff, y_test_shuff))
-#    modelPre.save_weights('models/tweet_classifier_' + iterid + '.h5')
-
-    #
-    #  CNN+V/CNN+W
-    #
-
-    # Prediction for DEV set
-#    score, acc = modelPre.evaluate(X_dev_flat, y_dev_flat, batch_size=batch_size)
-#    print('Dev score:', score)
-#    print('Dev accuracy:', acc)
-#    predDev = modelPre.predict(X_dev_flat)
-#    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
-
-    print('Dev...')
-    if CUDA_MODE:
-        data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda())
-    else:
-        data_x = Variable(torch.from_numpy(X_dev_flat).long())
-    data_f = f_dev_flat
-    
-    predDev = predict(net, data_x, data_f, predict_batch_size, domain=domain)
-    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
+    if (os.path.isfile('domadapt/predictions/cnnv_' + iterid + '.pkl') and 
+        os.path.isfile('domadapt/predictions/cnnw_' + iterid + '.pkl')):
+        print('Loading cnn prediction files...')
+        predfile = open('domadapt/predictions/cnnv_' + iterid + '.pkl', 'rb')
+        predTestmn = pkl.load(predfile)
+        predictions["cnnv"].extend(predTestmn)
+        predfile.close()
         
-    predDevmn = np.mean(predDev, axis=1)
-    print('Search CNN+V threshold')
-    thldmn = get_threshold(gold_dev, predDevmn)
+        predfile = open('domadapt/predictions/cnnw_' + iterid + '.pkl', 'rb')
+        predTestwm = pkl.load(predfile)
+        predictions["cnnw"].extend(predTestwm)
+        predfile.close()
+        
+    else:            
+        #
+        # Pre-train tweet-level vectors
+        #
+    
+        print('Build first model (tweet-level)...')
+        net = Pre(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128)
+        
+        # Train or load the model
+        if (os.path.isfile('domadapt/models/tweet_classifier_' + iterid + '.pkl')):
+            print('Loading model weights...')
+            net.load_state_dict(torch.load('domadapt/models/tweet_classifier_' + iterid + '.pkl'))
+        else:
+            net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
+            if CUDA_MODE:
+                net = net.cuda()
+                data_x = Variable(torch.from_numpy(X_train_shuff).long().cuda())
+                data_y = Variable(torch.from_numpy(y_train_shuff).float().cuda())
+            else:
+                data_x = Variable(torch.from_numpy(X_train_shuff).long())        
+                data_y = Variable(torch.from_numpy(y_train_shuff).float())
+            data_f = f_train_shuff
+            
+            print('Train...')
+            train(net, data_x, data_y, data_f, nb_epoch, batch_size, domain=domain)
+            torch.save(net.state_dict(), 'domadapt/models/tweet_classifier_' + iterid + '.pkl')
+    
+    
+        #
+        #  CNN+V/CNN+W
+        #
+    
+        # Prediction for DEV set
+        print('Dev...')
+        if CUDA_MODE:
+            data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda())
+        else:
+            data_x = Variable(torch.from_numpy(X_dev_flat).long())
+        data_f = f_dev_flat
+        
+        predDev = predict(net, data_x, data_f, predict_batch_size, domain=domain)
+        predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
+            
+        predDevmn = np.mean(predDev, axis=1)
+        print('Search CNN+V threshold')
+        thldmn = get_threshold(gold_dev, predDevmn)
+    
+        wts = np.linspace(1., 0.01, 2000)
+        predDevwm = np.average(predDev, axis=1, weights=wts)
+        print('Search CNN+W threshold')
+        thldwm = get_threshold(gold_dev, predDevwm)
+    
+        # Prediction for TEST set
+        print('Test...')
+        if CUDA_MODE:
+            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
+        else:
+            data_x = Variable(torch.from_numpy(X_test_flat).long())
+        data_f = f_test_flat
+        predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain)
+        predTest = predTest.reshape((test_shp[0], test_shp[1]))
+    
+        predTestmn = np.mean(predTest, axis=1)
+        predTestmn = (predTestmn >= thldmn).astype(int)
+        predictions["cnnv"].extend(predTestmn)
+        predfile = open('domadapt/predictions/cnnv_' + iterid + '.pkl', 'wb')
+        pkl.dump(predTestmn, predfile)
+        predfile.close()
 
-    wts = np.linspace(1., 0.01, 2000)
-    predDevwm = np.average(predDev, axis=1, weights=wts)
-    print('Search CNN+W threshold')
-    thldwm = get_threshold(gold_dev, predDevwm)
-
-    # Prediction for TEST set
-#    score, acc = modelPre.evaluate(X_test_flat, y_test_flat, batch_size=batch_size)
-#    print('Test score:', score)
-#    print('Test accuracy:', acc)
-#    predTest = modelPre.predict(X_test_flat)
-#    predTest = predTest.reshape((test_shp[0], test_shp[1]))
-
-    print('Test...')
-    if CUDA_MODE:
-        data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
-    else:
-        data_x = Variable(torch.from_numpy(X_test_flat).long())
-    data_f = f_test_flat
-    predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain)
-    predTest = predTest.reshape((test_shp[0], test_shp[1]))
-
-    predTestmn = np.mean(predTest, axis=1)
-    predTestmn = (predTestmn >= thldmn).astype(int)
-    predictions["cnnv"].extend(predTestmn)
-
-    wts = np.linspace(1., 0.01, 2000)
-    predTestwm = np.average(predTest, axis=1, weights=wts)
-    predTestwm = (predTestwm >= thldwm).astype(int)
-    predictions["cnnw"].extend(predTestwm)
-
-
-#    #
-#    # Intermediate data structure to get the input for GRU+V/GRU+W
-#    #
-#    #
-#
-#    data_x = Variable(torch.from_numpy(X_test_flat).long())
-#    X_test_mid = predict(net, data_x, intermediate=True)
-#    X_test_mid = X_test_mid.data.numpy().reshape((test_shp[0], test_shp[1], 128))
-#    X_test_mid = np.fliplr(X_test_mid)
-#    y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
-#    y_test_mid = np.fliplr(y_test_mid)
-#
-#    data_x = Variable(torch.from_numpy(X_dev_flat).long())
-#    X_dev_mid = predict(net, data_x, intermediate=True)
-#    X_dev_mid = X_dev_mid.data.numpy().reshape((dev_shp[0], dev_shp[1], 128))
-#    X_dev_mid = np.fliplr(X_dev_mid)
-#    y_dev_mid = y_dev_flat.reshape((dev_shp[0], dev_shp[1], 1))
-#    y_dev_mid = np.fliplr(y_dev_mid)
-#
-#
-#    #
-#    #  GRU+V/GRU+W
-#    #
-#
-#    batch_size = 32
-#
-#    modelGRU = Sequential()
-#    modelGRU.add(GRU(128,
-#                   dropout_W=0.2,
-#                   dropout_U=0.2,
-#                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
-#                   return_sequences=True))
-#    modelGRU.add(TimeDistributed(Dense(1, activation='sigmoid')))
-#
-#    # Compile
-#    modelGRU.compile(loss='binary_crossentropy',
-#                  optimizer='adam',
-#                  metrics=['accuracy'])
-#    modelGRU.summary()
-#
-#    chunk = 256
-#    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-#    y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
-#    for i in range(0, train_shp[0], chunk):
-#        last_idx = min(chunk, train_shp[0] - i)
-#        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-#        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-#        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-#        X_train_chunk = np.fliplr(X_train_chunk)
-#        X_train_mid[i:(i + last_idx)] = X_train_chunk
-#        y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
-#        y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
-#        y_train_chunk = np.fliplr(y_train_chunk)
-#        y_train_mid[i:(i + last_idx)] = y_train_chunk
-#
-#
-#    # Train the model
-#    modelGRU.fit(X_train_mid,
-#                  y_train_mid,
-#                  batch_size=batch_size,
-#                  nb_epoch=nb_epoch,
-#                  validation_data=(X_dev_mid, y_dev_mid))
-#    modelGRU.save_weights('models/gru_' + iterid + '.h5')
-#
-#    # Prediction for DEV set
-#    score, acc = modelGRU.evaluate(X_dev_mid, y_dev_mid, batch_size=batch_size)
-#    print('Dev score:', score)
-#    print('Dev accuracy:', acc)
-#    predDev = modelGRU.predict(X_dev_mid)
-#    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
-#
-#    predDevmn = np.mean(predDev, axis=1)
-#    print('Search GRU+V threshold')
-#    thldmn = get_threshold(gold_dev, predDevmn)
-#
-#    wts = np.linspace(1., 0.01, 2000)
-#    predDevwm = np.average(predDev, axis=1, weights=wts)
-#    print('Search GRU+W threshold')
-#    thldwm = get_threshold(gold_dev, predDevwm)
-#
-#    # Prediction for TEST set
-#    score, acc = modelGRU.evaluate(X_test_mid, y_test_mid, batch_size=batch_size)
-#    print('Test score:', score)
-#    print('Test accuracy:', acc)
-#    predTest = modelGRU.predict(X_test_mid)
-#    predTest = predTest.reshape((test_shp[0], test_shp[1]))
-#
-#    predTestmn = np.mean(predTest, axis=1)
-#    predTestmn = (predTestmn >= thldmn).astype(int)
-#    predictions["gruv"].extend(predTestmn)
-#
-#    wts = np.linspace(1., 0.01, 2000)
-#    predTestwm = np.average(predTest, axis=1, weights=wts)
-#    predTestwm = (predTestwm >= thldwm).astype(int)
-#    predictions["gruw"].extend(predTestwm)
+        
+        wts = np.linspace(1., 0.01, 2000)
+        predTestwm = np.average(predTest, axis=1, weights=wts)
+        predTestwm = (predTestwm >= thldwm).astype(int)
+        predictions["cnnw"].extend(predTestwm)
+        predfile = open('domadapt/predictions/cnnw_' + iterid + '.pkl', 'wb')
+        pkl.dump(predTestwm, predfile)
+        predfile.close()
+    
+    #    #
+    #    # Intermediate data structure to get the input for GRU+V/GRU+W
+    #    #
+    #    #
+    #
+    #    data_x = Variable(torch.from_numpy(X_test_flat).long())
+    #    X_test_mid = predict(net, data_x, intermediate=True)
+    #    X_test_mid = X_test_mid.data.numpy().reshape((test_shp[0], test_shp[1], 128))
+    #    X_test_mid = np.fliplr(X_test_mid)
+    #    y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
+    #    y_test_mid = np.fliplr(y_test_mid)
+    #
+    #    data_x = Variable(torch.from_numpy(X_dev_flat).long())
+    #    X_dev_mid = predict(net, data_x, intermediate=True)
+    #    X_dev_mid = X_dev_mid.data.numpy().reshape((dev_shp[0], dev_shp[1], 128))
+    #    X_dev_mid = np.fliplr(X_dev_mid)
+    #    y_dev_mid = y_dev_flat.reshape((dev_shp[0], dev_shp[1], 1))
+    #    y_dev_mid = np.fliplr(y_dev_mid)
+    #
+    #
+    #    #
+    #    #  GRU+V/GRU+W
+    #    #
+    #
+    #    batch_size = 32
+    #
+    #    modelGRU = Sequential()
+    #    modelGRU.add(GRU(128,
+    #                   dropout_W=0.2,
+    #                   dropout_U=0.2,
+    #                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
+    #                   return_sequences=True))
+    #    modelGRU.add(TimeDistributed(Dense(1, activation='sigmoid')))
+    #
+    #    # Compile
+    #    modelGRU.compile(loss='binary_crossentropy',
+    #                  optimizer='adam',
+    #                  metrics=['accuracy'])
+    #    modelGRU.summary()
+    #
+    #    chunk = 256
+    #    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+    #    y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
+    #    for i in range(0, train_shp[0], chunk):
+    #        last_idx = min(chunk, train_shp[0] - i)
+    #        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+    #        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+    #        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+    #        X_train_chunk = np.fliplr(X_train_chunk)
+    #        X_train_mid[i:(i + last_idx)] = X_train_chunk
+    #        y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
+    #        y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
+    #        y_train_chunk = np.fliplr(y_train_chunk)
+    #        y_train_mid[i:(i + last_idx)] = y_train_chunk
+    #
+    #
+    #    # Train the model
+    #    modelGRU.fit(X_train_mid,
+    #                  y_train_mid,
+    #                  batch_size=batch_size,
+    #                  nb_epoch=nb_epoch,
+    #                  validation_data=(X_dev_mid, y_dev_mid))
+    #    modelGRU.save_weights('models/gru_' + iterid + '.h5')
+    #
+    #    # Prediction for DEV set
+    #    score, acc = modelGRU.evaluate(X_dev_mid, y_dev_mid, batch_size=batch_size)
+    #    print('Dev score:', score)
+    #    print('Dev accuracy:', acc)
+    #    predDev = modelGRU.predict(X_dev_mid)
+    #    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
+    #
+    #    predDevmn = np.mean(predDev, axis=1)
+    #    print('Search GRU+V threshold')
+    #    thldmn = get_threshold(gold_dev, predDevmn)
+    #
+    #    wts = np.linspace(1., 0.01, 2000)
+    #    predDevwm = np.average(predDev, axis=1, weights=wts)
+    #    print('Search GRU+W threshold')
+    #    thldwm = get_threshold(gold_dev, predDevwm)
+    #
+    #    # Prediction for TEST set
+    #    score, acc = modelGRU.evaluate(X_test_mid, y_test_mid, batch_size=batch_size)
+    #    print('Test score:', score)
+    #    print('Test accuracy:', acc)
+    #    predTest = modelGRU.predict(X_test_mid)
+    #    predTest = predTest.reshape((test_shp[0], test_shp[1]))
+    #
+    #    predTestmn = np.mean(predTest, axis=1)
+    #    predTestmn = (predTestmn >= thldmn).astype(int)
+    #    predictions["gruv"].extend(predTestmn)
+    #
+    #    wts = np.linspace(1., 0.01, 2000)
+    #    predTestwm = np.average(predTest, axis=1, weights=wts)
+    #    predTestwm = (predTestwm >= thldwm).astype(int)
+    #    predictions["gruw"].extend(predTestwm)
 
 
 gold_test = np.array(gold_test)
