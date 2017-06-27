@@ -14,6 +14,7 @@ np.random.seed(947) # for reproducibility
 import pickle as pkl
 import sys
 import math
+import os
 
 from keras.preprocessing import sequence
 #from keras.models import Sequential
@@ -506,7 +507,7 @@ def get_threshold(gold, pred):
                 print("threshold:", maxth, ", F1:", maxf1)
                 vary = True
                 earlystop = 0
-            else:
+            elif threshold > maxth:
                 earlystop += 1
                 if earlystop == 2:
                     start = maxth - step
@@ -764,6 +765,8 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         if (os.path.isfile('domadapt/models/tweet_classifier_' + iterid + '.pkl')):
             print('Loading model weights...')
             net.load_state_dict(torch.load('domadapt/models/tweet_classifier_' + iterid + '.pkl'))
+            if CUDA_MODE:
+                net = net.cuda()
         else:
             net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
             if CUDA_MODE:
