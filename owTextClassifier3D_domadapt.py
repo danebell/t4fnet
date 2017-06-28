@@ -28,6 +28,10 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch import optim
 
+torch.manual_seed(12345)
+if CUDA_MODE:
+    torch.cuda.manual_seed(12345)
+    
 
 def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
           padding='pre', truncating='pre', value=0.):
@@ -715,7 +719,7 @@ pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
-domain = False
+domain = True
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen)
 predictions = dict()
