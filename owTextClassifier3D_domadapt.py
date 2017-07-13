@@ -7,32 +7,61 @@
 # 
 #
 CUDA_MODE = True
+SEED = 55555
 
+import argparse
 import gzip
 import numpy as np
-np.random.seed(947) # for reproducibility
+np.random.seed(SEED) # for reproducibility
 import pickle as pkl
 import sys
 import math
 import os
 
 from keras.preprocessing import sequence
-#from keras.models import Sequential
-#from keras.layers import Dense, Dropout, Activation, Embedding, TimeDistributed
-#from keras.layers import GRU
-#from keras.layers import Convolution1D, MaxPooling1D, Flatten
-#from keras.layers.core import K
 
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch import optim
 
-torch.manual_seed(12345)
-if CUDA_MODE:
-    torch.cuda.manual_seed(12345)
-    
 
+parser = argparse.ArgumentParser(description='t4f-NN with domain adaptation.')
+parser.add_argument('--dir',
+                    help='director to stores models and predictions')
+parser.add_argument('--dom', action='store_true',
+                    help='apply domain adapatation')
+parser.add_argument('--cnn', action='store_true',
+                    help='apply domain adapatation with independent cnn')
+parser.add_argument('--zeros', action='store_true',
+                    help='concat generic and both target domains')
+parser.add_argument('--flat', action='store_true',
+                    help='replicate the output of the cnn for domain adapatation')
+
+args = parser.parse_args()
+
+base_dir = args.dir
+model_dir = base_dir + '/models/'
+pred_dir = base_dir + '/predictions/'
+domain = args.dom
+cnn = args.cnn
+flat = args.flat
+if cnn:
+    domain = True
+if flat:
+    domain = True
+zeros=args.zeros
+
+if not os.path.exists(model_dir):
+    os.makedirs(model_dir)
+if not os.path.exists(pred_dir):
+    os.makedirs(pred_dir)
+
+
+torch.manual_seed(SEED)
+if CUDA_MODE:
+    torch.cuda.manual_seed_all(SEED)
+    
 def pad3d(sequences, maxtweets=None, maxlen=None, dtype='int32',
           padding='pre', truncating='pre', value=0.):
     '''
@@ -378,7 +407,7 @@ def bootstrap(gold, pred, reps=100000, printit=True):
 def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     (x_pos, y_pos, i_pos, f_pos), (x_neg, y_neg, i_neg, f_neg) = pos, neg
 
-    folds = load_folds(foldsfile)
+    folds = load_folds(foldsfile, seed=SEED)
     for itern in range(0, len(folds)):
         X_train = list()
         y_train = list()
@@ -437,13 +466,6 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
         X_dev = np.array(X_dev)
         y_dev = np.array(y_dev)
         f_dev = np.array(f_dev)
-
-#        X_train = X_train[:10]
-#        y_train = y_train[:10]
-#        X_test = X_test[:10]
-#        y_test = y_test[:10]
-#        X_dev = X_dev[:10]
-#        y_dev = y_dev[:10]
         print(len(X_train), 'train sequences')
         print(len(X_test), 'test sequences')
         print(len(X_dev), 'dev sequences')
@@ -501,7 +523,6 @@ def get_threshold(gold, pred):
     step = 0.05
     while vary:
         vary = False
-        earlystop = 0
         for threshold in np.arange(start, stop, step):
             pred_th = (pred >= threshold).astype(int)
             (acc, precision, recall, f1, microf1, macrof1, baseline, p) = bootstrap(gold, pred_th, printit=False)
@@ -510,18 +531,14 @@ def get_threshold(gold, pred):
                 maxth = threshold
                 print("threshold:", maxth, ", F1:", maxf1)
                 vary = True
-                earlystop = 0
-            elif threshold > maxth:
-                earlystop += 1
-                if earlystop == 2:
-                    start = maxth - step
-                    if start < 0.:
-                        start = 0.
-                    stop = threshold - step
-                    if stop > 1.0:
-                        stop = 1.0
-                    step = step * 0.1
-                    break
+        start = maxth - step
+        if start < 0.:
+            start = 0.
+        stop = maxth + step
+        if stop > 1.0:
+            stop = 1.0
+        step = step * 0.1
+        
     return maxth
 
 def new_outs_lengths(input_lenght, kernel_size, padding=0, dilation=1, stride=1):
@@ -553,39 +570,92 @@ class Pre(nn.Module):
         self.dropout1 = nn.Dropout(p=0.4)
         self.linear2 = nn.Linear(hidden_size, 1)
         self.linear2_domadapt = nn.Linear(hidden_size*2, 1)
+        self.linear2_domadapt_zeros = nn.Linear(hidden_size*3, 1)
         self.sigmoid2 = nn.Sigmoid()
         
-    def forward(self, inputs, intermediate=False, domain=-1):
+    def forward(self, inputs, intermediate=False, test_mode=False, domain=-1, zeros=False, cnn=False, concat=True, flat=False):
         embeds = self.embs(inputs)
         embeds = embeds.transpose(0, 1).transpose(1, 2)
         out = self.c_cnn(embeds)
         out = self.c_pool(out)
         out = out.view((out.size()[0],out.size()[1] * out.size()[2]))
-        out = self.c_relu1(self.c_linear1(out))
+        outc = self.c_relu1(self.c_linear1(out))
         if domain == 0:
-            outf = self.f_cnn(embeds)
-            outf = self.f_pool(outf)
-            outf = outf.view((outf.size()[0],outf.size()[1] * outf.size()[2]))
-            outf = self.f_relu1(self.f_linear1(outf))
-            out = torch.cat((out,outf),1)
+            if flat:
+                if CUDA_MODE:
+                    zeros = Variable(torch.zeros(outc.size()).cuda())
+                else:            
+                    zeros = Variable(torch.zeros(outc.size()))
+                out = torch.cat((outc,outc,zeros),1)
+            else:
+                if cnn:
+                    outf = self.f_cnn(embeds)
+                    outf = self.f_pool(outf)
+                    outf = outf.view((outf.size()[0],outf.size()[1] * outf.size()[2]))
+                    outf = self.f_relu1(self.f_linear1(outf))
+                else:
+                    outf = self.f_relu1(self.f_linear1(out))
+                if zeros:
+                    if CUDA_MODE:
+                        zeros = Variable(torch.zeros(outf.size()).cuda())
+                    else:
+                        zeros = Variable(torch.zeros(outf.size()))
+                    out = torch.cat((outc,outf,zeros),1)
+                else:
+                    if concat:
+                        out = torch.cat((outc,outf),1)
+                    else:
+                        out = (outc + outf) / 2
         if domain == 1:
-            outm = self.m_cnn(embeds)
-            outm = self.m_pool(outm)
-            outm = outm.view((outm.size()[0],outm.size()[1] * outm.size()[2]))
-            outm = self.m_relu1(self.m_linear1(outm))
-            out = torch.cat((out,outm),1)
+            if flat:
+                if CUDA_MODE:
+                    zeros = Variable(torch.zeros(outc.size()).cuda())
+                else:            
+                    zeros = Variable(torch.zeros(outc.size()))
+                out = torch.cat((outc,zeros,outc),1)
+            else:
+                if cnn:
+                    outm = self.m_cnn(embeds)
+                    outm = self.m_pool(outm)
+                    outm = outm.view((outm.size()[0],outm.size()[1] * outm.size()[2]))
+                    outm = self.m_relu1(self.m_linear1(outm))
+                else:
+                    outm = self.m_relu1(self.m_linear1(out))
+                if zeros:
+                    if CUDA_MODE:
+                        zeros = Variable(torch.zeros(outm.size()).cuda())
+                    else:            
+                        zeros = Variable(torch.zeros(outm.size()))
+                    out = torch.cat((outc,zeros,outm),1)
+                else:
+                    if concat:
+                        out = torch.cat((outc,outm),1)
+                    else:
+                        out = (outc + outm) / 2
         if domain == -1:
             if not intermediate:
-                out = self.dropout1(out)
-                out = self.sigmoid2(self.linear2(out))
+                if not test_mode:
+                    outc = self.dropout1(outc)
+                out = self.sigmoid2(self.linear2(outc))
+        elif concat or flat:
+            if not intermediate:
+                if not test_mode:
+                    out = self.dropout1(out)
+                if zeros or flat:
+                    out = self.sigmoid2(self.linear2_domadapt_zeros(out))
+                else:
+                    out = self.sigmoid2(self.linear2_domadapt(out))
         else:
             if not intermediate:
-                out = self.dropout1(out)
-                out = self.sigmoid2(self.linear2_domadapt(out))
+                if not test_mode:
+                    out = self.dropout1(out)
+                out = self.sigmoid2(self.linear2(out))
+
         return out
 
+
         
-def predict(net, x, f, batch_size, intermediate=False, domain=False):
+def predict(net, x, f, batch_size, intermediate=False, domain=False, cnn=False, zeros=False, flat=False):
     pred = np.empty(0)
     batches = math.ceil(x.size()[0] / batch_size)
     for b in range(batches):
@@ -602,7 +672,7 @@ def predict(net, x, f, batch_size, intermediate=False, domain=False):
             if fb.dim() > 0:
                 bxf = bx[fb]
                 bxf = torch.transpose(bxf, 0, 1)
-                f_pred = net(bxf, domain=0)
+                f_pred = net(bxf, test_mode=True, domain=0, cnn=cnn, zeros=zeros, flat=flat)
             
             mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
             if CUDA_MODE:
@@ -613,7 +683,7 @@ def predict(net, x, f, batch_size, intermediate=False, domain=False):
             if mb.dim() > 0:
                 bxm = bx[mb]
                 bxm = torch.transpose(bxm, 0, 1)
-                m_pred = net(bxm, domain=1)
+                m_pred = net(bxm, test_mode=True, domain=1, cnn=cnn, zeros=zeros, flat=flat)
     
             if fb.dim() > 0 and mb.dim() > 0:
                 cb = torch.cat((fb, mb))
@@ -634,7 +704,7 @@ def predict(net, x, f, batch_size, intermediate=False, domain=False):
             
         else:
             bx = torch.transpose(bx, 0, 1)
-            b_pred = net(bx)
+            b_pred = net(bx, test_mode=True)
                         
         sys.stdout.write('\r[batch: %3d/%3d]' % (b + 1, batches))
         sys.stdout.flush()
@@ -645,8 +715,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=False):
     sys.stdout.write('\n')
     sys.stdout.flush()
     return pred
+
     
-def train(net, x, y, f, nepochs, batch_size, domain=False):
+def train(net, x, y, f, nepochs, batch_size, domain=False, cnn=False, zeros=False, flat=False):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(net.parameters())
     batches = math.ceil(x.size()[0] / batch_size)
@@ -678,15 +749,15 @@ def train(net, x, y, f, nepochs, batch_size, domain=False):
                 net.zero_grad()
                 
                 # Forward pass
-                yf_pred = net(bxf, domain=0)
-                ym_pred = net(bxm, domain=1)
+                yf_pred = net(bxf, domain=0, cnn=cnn, zeros=zeros, flat=flat)
+                ym_pred = net(bxm, domain=1, cnn=cnn, zeros=zeros, flat=flat)
 
                 by = torch.cat((byf, bym))                
                 y_pred = torch.cat((yf_pred, ym_pred))
                 
             else:
                 bx = torch.transpose(bx, 0, 1)
-                
+
                 # Clear gradients
                 net.zero_grad()
                 
@@ -719,9 +790,9 @@ pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
-domain = True
 
-pos, neg = load_data(nb_words=max_features, maxlen=maxlen)
+
+pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
 predictions["cnnv"] = list()
 predictions["cnnw"] = list()
@@ -744,15 +815,15 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     gold_dev = y_dev.flatten()
     gold_test.extend(y_test.flatten())
 
-    if (os.path.isfile('domadapt/predictions/cnnv_' + iterid + '.pkl') and 
-        os.path.isfile('domadapt/predictions/cnnw_' + iterid + '.pkl')):
+    if (os.path.isfile(pred_dir + 'cnnv_' + iterid + '.pkl') and 
+        os.path.isfile(pred_dir + 'cnnw_' + iterid + '.pkl')):
         print('Loading cnn prediction files...')
-        predfile = open('domadapt/predictions/cnnv_' + iterid + '.pkl', 'rb')
+        predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'rb')
         predTestmn = pkl.load(predfile)
         predictions["cnnv"].extend(predTestmn)
         predfile.close()
         
-        predfile = open('domadapt/predictions/cnnw_' + iterid + '.pkl', 'rb')
+        predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'rb')
         predTestwm = pkl.load(predfile)
         predictions["cnnw"].extend(predTestwm)
         predfile.close()
@@ -764,15 +835,18 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     
         print('Build first model (tweet-level)...')
         net = Pre(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128)
-        
+
         # Train or load the model
-        if (os.path.isfile('domadapt/models/tweet_classifier_' + iterid + '.pkl')):
+        if (os.path.isfile(model_dir + 'tweet_classifier_' + iterid + '.pkl')):
             print('Loading model weights...')
-            net.load_state_dict(torch.load('domadapt/models/tweet_classifier_' + iterid + '.pkl'))
+            net.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
             if CUDA_MODE:
                 net = net.cuda()
         else:
             net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
+            #net.c_embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
+            #net.f_embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
+            #net.m_embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
             if CUDA_MODE:
                 net = net.cuda()
                 data_x = Variable(torch.from_numpy(X_train_shuff).long().cuda())
@@ -783,8 +857,8 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             data_f = f_train_shuff
             
             print('Train...')
-            train(net, data_x, data_y, data_f, nb_epoch, batch_size, domain=domain)
-            torch.save(net.state_dict(), 'domadapt/models/tweet_classifier_' + iterid + '.pkl')
+            train(net, data_x, data_y, data_f, nb_epoch, batch_size, domain=domain, cnn=cnn, zeros=zeros, flat=flat)
+            torch.save(net.state_dict(), model_dir + 'tweet_classifier_' + iterid + '.pkl')
     
     
         #
@@ -799,41 +873,44 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             data_x = Variable(torch.from_numpy(X_dev_flat).long())
         data_f = f_dev_flat
         
-        predDev = predict(net, data_x, data_f, predict_batch_size, domain=domain)
+        predDev = predict(net, data_x, data_f, predict_batch_size, domain=domain, cnn=cnn, zeros=zeros, flat=flat)
         predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
-            
+
         predDevmn = np.mean(predDev, axis=1)
         print('Search CNN+V threshold')
         thldmn = get_threshold(gold_dev, predDevmn)
-    
+
         wts = np.linspace(1., 0.01, 2000)
         predDevwm = np.average(predDev, axis=1, weights=wts)
         print('Search CNN+W threshold')
         thldwm = get_threshold(gold_dev, predDevwm)
-    
-        # Prediction for TEST set
+
+        
+        #Prediction for TEST set
         print('Test...')
         if CUDA_MODE:
             data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
         else:
             data_x = Variable(torch.from_numpy(X_test_flat).long())
         data_f = f_test_flat
-        predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain)
+        predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain, cnn=cnn, zeros=zeros, flat=flat)
         predTest = predTest.reshape((test_shp[0], test_shp[1]))
     
+        print('CNN+V with threshold = ', thldmn)
         predTestmn = np.mean(predTest, axis=1)
         predTestmn = (predTestmn >= thldmn).astype(int)
         predictions["cnnv"].extend(predTestmn)
-        predfile = open('domadapt/predictions/cnnv_' + iterid + '.pkl', 'wb')
+        predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'wb')
         pkl.dump(predTestmn, predfile)
         predfile.close()
 
         
+        print('CNN+W with threshold = ', thldwm)
         wts = np.linspace(1., 0.01, 2000)
         predTestwm = np.average(predTest, axis=1, weights=wts)
         predTestwm = (predTestwm >= thldwm).astype(int)
         predictions["cnnw"].extend(predTestwm)
-        predfile = open('domadapt/predictions/cnnw_' + iterid + '.pkl', 'wb')
+        predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'wb')
         pkl.dump(predTestwm, predfile)
         predfile.close()
     
