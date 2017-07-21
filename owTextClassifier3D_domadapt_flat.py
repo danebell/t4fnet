@@ -29,8 +29,8 @@ from torch import optim
 parser = argparse.ArgumentParser(description='t4f-NN with domain adaptation.')
 parser.add_argument('--dir',
                     help='director to stores models and predictions')
-parser.add_argument('--genre', action='store_true',
-                    help='apply domain adapatation for genre')
+parser.add_argument('--gender', action='store_true',
+                    help='apply domain adapatation for gender')
 parser.add_argument('--retweet', action='store_true',
                     help='apply domain adapatation for retweet')
 
@@ -40,7 +40,7 @@ base_dir = args.dir
 model_dir = base_dir + '/models/'
 pred_dir = base_dir + '/predictions/'
 domain = [False, False]
-domain[0] = args.genre
+domain[0] = args.gender
 domain[1] = args.retweet
 
 if not os.path.exists(model_dir):
@@ -561,7 +561,7 @@ class Pre(nn.Module):
         
         if domain[0] is not None or domain[1] is not None: 
             if CUDA_MODE:
-                zeros = Variable(torch.zeros(ut.size()).cuda())
+                zeros = Variable(torch.zeros(out.size()).cuda())
             else:            
                 zeros = Variable(torch.zeros(out.size()))
         
@@ -947,7 +947,7 @@ predictions["gruw"] = list()
 gold_test = list()
 iterations = list()
 foldsfile = "folds.csv"
-f#oldsfile = "data_toy/folds.csv"
+#foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
     iterations.append(iterid)
