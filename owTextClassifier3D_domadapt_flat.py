@@ -6,7 +6,7 @@
 # NN models to classify Twitter account users as Overweight or Not Overweight.
 # 
 #
-CUDA_MODE = True
+CUDA_MODE = False
 SEED = 12345
 
 import argparse
@@ -28,7 +28,7 @@ from torch import optim
 
 parser = argparse.ArgumentParser(description='t4f-NN with domain adaptation.')
 parser.add_argument('--dir',
-                    help='director to stores models and predictions')
+                    help='directory to stores models and predictions')
 parser.add_argument('--gender', action='store_true',
                     help='apply domain adapatation for gender')
 parser.add_argument('--retweet', action='store_true',
@@ -110,8 +110,8 @@ def push_indices(x, start, index_from):
     else:
         return x
 
-def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
-#def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
+def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
@@ -201,8 +201,8 @@ def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    vocab='ow3df.dict.pkl', 
-                    #vocab='data_toy/ow3df.dict.pkl', 
+                    #vocab='ow3df.dict.pkl', 
+                    vocab='data_toy/ow3df.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
@@ -535,10 +535,10 @@ def new_outs_lengths(input_lenght, kernel_size, padding=0, dilation=1, stride=1)
 #   The Model
 #
     
-class Pre(nn.Module):
+class CNN(nn.Module):
     def __init__(self, max_features, embedding_dim, seq_length, nb_filter,
                  filter_length, pool_length, hidden_size, feats=0):
-        super(Pre, self).__init__()
+        super(CNN, self).__init__()
         cnn_out_length = new_outs_lengths(seq_length, filter_length)
         pool_out_length = new_outs_lengths(cnn_out_length, pool_length, stride=pool_length)
         self.embs = nn.Embedding(max_features + 3, embedding_dim)
@@ -946,8 +946,8 @@ predictions["gruv"] = list()
 predictions["gruw"] = list()
 gold_test = list()
 iterations = list()
-foldsfile = "folds.csv"
-#foldsfile = "data_toy/folds.csv"
+#foldsfile = "folds.csv"
+foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
     iterations.append(iterid)
@@ -976,7 +976,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     
         print('Build first model (tweet-level)...')
         num_feats = int(np.sum(np.array(domain)==True))
-        net = Pre(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+        net = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
 
         # Train or load the model
         if (os.path.isfile(model_dir + 'tweet_classifier_' + iterid + '.pkl')):
@@ -1058,102 +1058,6 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         predfile.close()
         del(predTestwm)
 
-    
-    #    #
-    #    # Intermediate data structure to get the input for GRU+V/GRU+W
-    #    #
-    #    #
-    #
-    #    data_x = Variable(torch.from_numpy(X_test_flat).long())
-    #    X_test_mid = predict(net, data_x, intermediate=True)
-    #    X_test_mid = X_test_mid.data.numpy().reshape((test_shp[0], test_shp[1], 128))
-    #    X_test_mid = np.fliplr(X_test_mid)
-    #    y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
-    #    y_test_mid = np.fliplr(y_test_mid)
-    #
-    #    data_x = Variable(torch.from_numpy(X_dev_flat).long())
-    #    X_dev_mid = predict(net, data_x, intermediate=True)
-    #    X_dev_mid = X_dev_mid.data.numpy().reshape((dev_shp[0], dev_shp[1], 128))
-    #    X_dev_mid = np.fliplr(X_dev_mid)
-    #    y_dev_mid = y_dev_flat.reshape((dev_shp[0], dev_shp[1], 1))
-    #    y_dev_mid = np.fliplr(y_dev_mid)
-    #
-    #
-    #    #
-    #    #  GRU+V/GRU+W
-    #    #
-    #
-    #    batch_size = 32
-    #
-    #    modelGRU = Sequential()
-    #    modelGRU.add(GRU(128,
-    #                   dropout_W=0.2,
-    #                   dropout_U=0.2,
-    #                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
-    #                   return_sequences=True))
-    #    modelGRU.add(TimeDistributed(Dense(1, activation='sigmoid')))
-    #
-    #    # Compile
-    #    modelGRU.compile(loss='binary_crossentropy',
-    #                  optimizer='adam',
-    #                  metrics=['accuracy'])
-    #    modelGRU.summary()
-    #
-    #    chunk = 256
-    #    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    #    y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
-    #    for i in range(0, train_shp[0], chunk):
-    #        last_idx = min(chunk, train_shp[0] - i)
-    #        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-    #        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-    #        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-    #        X_train_chunk = np.fliplr(X_train_chunk)
-    #        X_train_mid[i:(i + last_idx)] = X_train_chunk
-    #        y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
-    #        y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
-    #        y_train_chunk = np.fliplr(y_train_chunk)
-    #        y_train_mid[i:(i + last_idx)] = y_train_chunk
-    #
-    #
-    #    # Train the model
-    #    modelGRU.fit(X_train_mid,
-    #                  y_train_mid,
-    #                  batch_size=batch_size,
-    #                  nb_epoch=nb_epoch,
-    #                  validation_data=(X_dev_mid, y_dev_mid))
-    #    modelGRU.save_weights('models/gru_' + iterid + '.h5')
-    #
-    #    # Prediction for DEV set
-    #    score, acc = modelGRU.evaluate(X_dev_mid, y_dev_mid, batch_size=batch_size)
-    #    print('Dev score:', score)
-    #    print('Dev accuracy:', acc)
-    #    predDev = modelGRU.predict(X_dev_mid)
-    #    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
-    #
-    #    predDevmn = np.mean(predDev, axis=1)
-    #    print('Search GRU+V threshold')
-    #    thldmn = get_threshold(gold_dev, predDevmn)
-    #
-    #    wts = np.linspace(1., 0.01, 2000)
-    #    predDevwm = np.average(predDev, axis=1, weights=wts)
-    #    print('Search GRU+W threshold')
-    #    thldwm = get_threshold(gold_dev, predDevwm)
-    #
-    #    # Prediction for TEST set
-    #    score, acc = modelGRU.evaluate(X_test_mid, y_test_mid, batch_size=batch_size)
-    #    print('Test score:', score)
-    #    print('Test accuracy:', acc)
-    #    predTest = modelGRU.predict(X_test_mid)
-    #    predTest = predTest.reshape((test_shp[0], test_shp[1]))
-    #
-    #    predTestmn = np.mean(predTest, axis=1)
-    #    predTestmn = (predTestmn >= thldmn).astype(int)
-    #    predictions["gruv"].extend(predTestmn)
-    #
-    #    wts = np.linspace(1., 0.01, 2000)
-    #    predTestwm = np.average(predTest, axis=1, weights=wts)
-    #    predTestwm = (predTestwm >= thldwm).astype(int)
-    #    predictions["gruw"].extend(predTestwm)
 
 for iterid in iterations:
     print(iterid + ': Loading cnn prediction files...')
@@ -1180,13 +1084,3 @@ bootstrap(gold_test, np.array(predictions["cnnw"]))
 predfile = open('predictions/cnnw.pkl', 'wb')
 pkl.dump(predictions["cnnw"], predfile)
 predfile.close()
-#print("\nGRU+V")
-#bootstrap(gold_test, np.array(predictions["gruv"]))
-#predfile = open('predictions/gruv.pkl', 'wb')
-#pkl.dump(predictions["gruv"], predfile)
-#predfile.close()
-#print("\nGRU+W")
-#bootstrap(gold_test, np.array(predictions["gruw"]))
-#predfile = open('predictions/gruw.pkl', 'wb')
-#pkl.dump(predictions["gruw"], predfile)
-#predfile.close()
