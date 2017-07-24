@@ -6,8 +6,8 @@
 # NN models to classify Twitter account users as Overweight or Not Overweight.
 # 
 #
-CUDA_MODE = False
-SEED = 12345
+CUDA_MODE = True
+SEED = 947
 
 import argparse
 import gzip
@@ -110,8 +110,8 @@ def push_indices(x, start, index_from):
     else:
         return x
 
-#def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
-def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
+def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
@@ -201,8 +201,8 @@ def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    #vocab='ow3df.dict.pkl', 
-                    vocab='data_toy/ow3df.dict.pkl', 
+                    vocab='ow3df.dict.pkl', 
+                    #vocab='data_toy/ow3df.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
@@ -946,8 +946,8 @@ predictions["gruv"] = list()
 predictions["gruw"] = list()
 gold_test = list()
 iterations = list()
-#foldsfile = "folds.csv"
-foldsfile = "data_toy/folds.csv"
+foldsfile = "folds.csv"
+#foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
     iterations.append(iterid)
