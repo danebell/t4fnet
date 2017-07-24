@@ -546,11 +546,10 @@ class CNN(nn.Module):
         self.pool = nn.MaxPool1d(pool_length)        
         self.linear1 = nn.Linear(int(pool_out_length) * nb_filter, hidden_size)
         self.relu1 = nn.ReLU()
-        self.dropout1 = nn.Dropout(p=0.4)
         self.linear2 = nn.Linear(hidden_size * (1 + feats * 2), 1)
         self.sigmoid2 = nn.Sigmoid()
-        
-    def forward(self, inputs, intermediate=False, test_mode=False, domain=[None,None]):
+
+    def forward(self, inputs, test_mode=False, domain=[None,None]):
         embeds = self.embs(inputs)
         embeds = embeds.transpose(0, 1).transpose(1, 2)
         outc = self.cnn(embeds)
@@ -575,13 +574,41 @@ class CNN(nn.Module):
         elif domain[1] == 1:
             out = torch.cat((out,zeros,outc),1)
                        
-        if not test_mode:
-            out = self.dropout1(out)
-        out = self.sigmoid2(self.linear2(out))
-
         return out
 
-
+class GRU(nn.Module):
+    def __init__(self, input_dim, hidden_size, feats=0):
+        super(GRU, self).__init__()
+        self.hidden_size = hidden_size
+        self.gru = nn.GRU(input_dim, hidden_size)
+        self.linear = nn.Linear(hidden_size, 1)
+        self.dropout = nn.Dropout(p=0.5)
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, input_seq, test_mode=False):
+        out, _ = self.gru(input_seq)
+        out = out.view(out.size()[0] * out.size()[1], -1)
+        if not test_mode:
+            out = self.dropout(out)
+        out = self.sigmoid(self.linear(out))
+        return out
+        
+#        batch_size = 32
+#    
+#        modelGRU = Sequential()
+#        modelGRU.add(GRU(128,
+#                       dropout_W=0.2,
+#                       dropout_U=0.2,
+#                       input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
+#                       return_sequences=True))
+#        modelGRU.add(TimeDistributed(Dense(1, activation='sigmoid')))
+#    
+#        # Compile
+#        modelGRU.compile(loss='binary_crossentropy',
+#                      optimizer='adam',
+#                      metrics=['accuracy'])
+#        modelGRU.summary()
+    
         
 def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
     pred = np.empty(0)
@@ -764,7 +791,7 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
     return pred
 
     
-def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
+def train(net, x, y, f, nepochs, batch_size):
     criterion = nn.BCELoss()
     optimizer = optim.Adam(net.parameters())
     batches = math.ceil(x.size()[0] / batch_size)
@@ -778,135 +805,9 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
             # Clear gradients
             net.zero_grad()
 
-            # No domain
-            if domain[0] == domain[1] == False:
-                bx = torch.transpose(bx, 0, 1)
-                y_pred = net(bx)
-                del(bx)
-            
-            # Only one domain
-            elif domain[0] == False or domain[1] == False:
-                bf = f[b*batch_size:b*batch_size+batch_size]
-
-                if domain[1] == False:
-                    fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
-                else:
-                    fb = torch.LongTensor(torch.np.where(bf[:,2]==0)[0])                    
-                if CUDA_MODE:
-                    fb = fb.cuda()
-                bxf = bx[fb]
-                byf = by[fb]
-                del(fb)
-                bxf = torch.transpose(bxf, 0, 1)
-    
-                if domain[1] == False:
-                    mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
-                else:
-                    mb = torch.LongTensor(torch.np.where(bf[:,2]==1)[0])
-                    
-                if CUDA_MODE:
-                    mb = mb.cuda()
-                bxm = bx[mb]
-                bym = by[mb]
-                del(mb)
-                bxm = torch.transpose(bxm, 0, 1)
-                                
-                del(bx, bf)
-
-                # Forward pass
-                if domain[1] == False:
-                    yf_pred = net(bxf, domain=[0,None])
-                    del(bxf)
-                    ym_pred = net(bxm, domain=[1,None])
-                    del(bxm)
-                else:
-                    yf_pred = net(bxf, domain=[None,0])
-                    del(bxf)
-                    ym_pred = net(bxm, domain=[None,1])
-                    del(bxm)
-                    
-                by = torch.cat((byf, bym))
-                del(byf, bym)
-                y_pred = torch.cat((yf_pred, ym_pred))
-                del(yf_pred, ym_pred)
-
-            # Two domains                
-            else:
-                bf = f[b*batch_size:b*batch_size+batch_size]
-
-                fnb = torch.LongTensor(torch.np.where((bf[:,0]==0) & (bf[:,2]==0))[0])
-                if CUDA_MODE:
-                    fnb = fnb.cuda()
-                if fnb.dim() > 0:
-                    bxfn = bx[fnb]
-                    byfn = by[fnb]
-                    bxfn = torch.transpose(bxfn, 0, 1)
-                    yfn_pred = net(bxfn, domain=[0,0])
-                    del(bxfn)
-                
-                ftb = torch.LongTensor(torch.np.where((bf[:,0]==0) & (bf[:,2]==1))[0])
-                if CUDA_MODE:
-                    ftb = ftb.cuda()
-                if ftb.dim() > 0:
-                    bxft = bx[ftb]
-                    byft = by[ftb]
-                    bxft = torch.transpose(bxft, 0, 1)
-                    yft_pred = net(bxft, domain=[0,1])
-                    del(bxft)
-                                
-                mnb = torch.LongTensor(torch.np.where((bf[:,0]==1) & (bf[:,2]==0))[0])
-                if CUDA_MODE:
-                    mnb = mnb.cuda()
-                if mnb.dim() > 0:
-                    bxmn = bx[mnb]
-                    bymn = by[mnb]
-                    bxmn = torch.transpose(bxmn, 0, 1)
-                    ymn_pred = net(bxmn, domain=[1,0])
-                    del(bxmn)
-        
-                mtb = torch.LongTensor(torch.np.where((bf[:,0]==1) & (bf[:,2]==1))[0])
-                if CUDA_MODE:
-                    mtb = mtb.cuda()
-                if mtb.dim() > 0:
-                    bxmt = bx[mtb]
-                    bymt = by[mtb]
-                    bxmt = torch.transpose(bxmt, 0, 1)
-                    ymt_pred = net(bxmt, domain=[1,1])
-                    del(bxmt)
-
-                del(bx, bf)
-                
-                by_list = list()
-                ypred_list = list()
-                if fnb.dim() > 0:
-                    by_list.append(byfn)
-                    del(byfn)
-                    ypred_list.append(yfn_pred)
-                    del(yfn_pred)
-                    del(fnb)
-                if ftb.dim() > 0:
-                    by_list.append(byft)
-                    del(byft)
-                    ypred_list.append(yft_pred)
-                    del(yft_pred)
-                    del(ftb)
-                if mnb.dim() > 0:
-                    by_list.append(bymn)
-                    del(bymn)
-                    ypred_list.append(ymn_pred)
-                    del(ymn_pred)
-                    del(mnb)
-                if mtb.dim() > 0:
-                    by_list.append(bymt)
-                    del(bymt)
-                    ypred_list.append(ymt_pred)
-                    del(ymt_pred)
-                    del(mtb)
-                
-                by = torch.cat(by_list)                
-                del(by_list)
-                y_pred = torch.cat(ypred_list)
-                del(ypred_list)
+            bx = torch.transpose(bx, 0, 1)
+            y_pred = net(bx)
+            del(bx)            
                                 
             # Compute loss
             loss = criterion(y_pred, by)
@@ -940,8 +841,6 @@ predict_batch_size = 612
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
-predictions["cnnv"] = list()
-predictions["cnnw"] = list()
 predictions["gruv"] = list()
 predictions["gruw"] = list()
 gold_test = list()
@@ -953,11 +852,11 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     iterations.append(iterid)
     print('')
     print('Iteration: %s' % iterid)
-    (_, X_train_shuff, _, _, y_train_shuff,
-     _, _, f_train_shuff, train_shp) = iteration[1]
-    (X_test_flat, _, y_test, _, _,
+    (X_train_flat, X_train_shuff, _, y_train_flat, y_train_shuff,
+     _, f_train_flat, f_train_shuff, train_shp) = iteration[1]
+    (X_test_flat, _, y_test, y_test_flat, _,
      _, f_test_flat, _, test_shp) = iteration[2]
-    (X_dev_flat, _, y_dev, _, _,
+    (X_dev_flat, _, y_dev, y_dev_flat, _,
      _, f_dev_flat, _, dev_shp) = iteration[3]
     
     print('X_train shape:', train_shp)
@@ -968,119 +867,159 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     gold_dev = y_dev.flatten()
     gold_test.extend(y_test.flatten())
 
-    if not (os.path.isfile(pred_dir + 'cnnv_' + iterid + '.pkl') and 
-        os.path.isfile(pred_dir + 'cnnw_' + iterid + '.pkl')):
+    if not (os.path.isfile(pred_dir + 'gruv_' + iterid + '.pkl') and 
+        os.path.isfile(pred_dir + 'gruw_' + iterid + '.pkl')):
         #
         # Pre-train tweet-level vectors
         #
     
         print('Build first model (tweet-level)...')
         num_feats = int(np.sum(np.array(domain)==True))
-        net = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+        cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
 
         # Train or load the model
-        if (os.path.isfile(model_dir + 'tweet_classifier_' + iterid + '.pkl')):
+        print('Loading model weights...')
+        cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
+        if CUDA_MODE:
+            cnn = cnn.cuda()
+            
+        #
+        #  GRU+V/GRU+W
+        #
+    
+        gru = GRU(128, 128, feats=num_feats)
+                
+        if (os.path.isfile(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')):
             print('Loading model weights...')
-            net.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
+            gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
             if CUDA_MODE:
-                net = net.cuda()
+                gru = gru.cuda()
         else:
-            net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
+            chunk = 256
+            X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+            y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
+            for i in range(0, train_shp[0], chunk):
+                last_idx = min(chunk, train_shp[0] - i)
+                print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+                X_train_chunk = X_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
+                f_train_chunk = f_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
+                data_x = Variable(torch.from_numpy(X_train_chunk).long())
+                data_f = f_train_chunk
+                X_train_chunk = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
+                X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+                X_train_chunk = np.fliplr(X_train_chunk)
+                X_train_mid[i:(i + last_idx)] = X_train_chunk
+                y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
+                y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
+                y_train_chunk = np.fliplr(y_train_chunk)
+                y_train_mid[i:(i + last_idx)] = y_train_chunk
+         
+
             if CUDA_MODE:
                 net = net.cuda()
-                data_x = Variable(torch.from_numpy(X_train_shuff).long().cuda())
-                data_y = Variable(torch.from_numpy(y_train_shuff).float().cuda())
+                data_x = Variable(torch.from_numpy(X_train_mid).float().cuda())
+                data_y = Variable(torch.from_numpy(y_train_mid).float().cuda())
             else:
-                data_x = Variable(torch.from_numpy(X_train_shuff).long())        
-                data_y = Variable(torch.from_numpy(y_train_shuff).float())
-            data_f = f_train_shuff
+                data_x = Variable(torch.from_numpy(X_train_mid).float())        
+                data_y = Variable(torch.from_numpy(y_train_mid).float())
             
             print('Train...')
-            train(net, data_x, data_y, data_f, nb_epoch, batch_size, domain=domain)
-            del(data_x, data_y, data_f)
-            torch.save(net.state_dict(), model_dir + 'tweet_classifier_' + iterid + '.pkl')
-            
-    
-        #
-        #  CNN+V/CNN+W
-        #
-    
+            batch_size_gru=32
+            train(gru, data_x, data_y, _, nb_epoch, batch_size_gru)
+            del(data_x, data_y)
+            torch.save(gru.state_dict(), model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')
+
+          
         # Prediction for DEV set
         print('Dev...')
-        if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda())
-        else:
-            data_x = Variable(torch.from_numpy(X_dev_flat).long())
-        data_f = f_dev_flat
+        print('Getting tweet embeddings...')
+        data_x = Variable(torch.from_numpy(X_test_flat).long())
+        data_f = f_test_flat
+        X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
+        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
+        X_test_mid = np.fliplr(X_test_mid)
         
-        predDev = predict(net, data_x, data_f, predict_batch_size, domain=domain)
-        del(data_x, data_f)
+        
+        if CUDA_MODE:
+            data_x = Variable(torch.FloatTensor(X_dev_mid).cuda())
+        else:
+            data_x = Variable(torch.FloatTensor(X_dev_mid))
+        
+        predDev = predict(gru, data_x, _, predict_batch_size)
+        del(data_x)
         predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
         predDevmn = np.mean(predDev, axis=1)
-        print('Search CNN+V threshold')
+        print('Search GRU+V threshold')
         thldmn = get_threshold(gold_dev, predDevmn)
         del(predDevmn)
         
         wts = np.linspace(1., 0.01, 2000)
         predDevwm = np.average(predDev, axis=1, weights=wts)
-        print('Search CNN+W threshold')
+        print('Search GRU+W threshold')
         thldwm = get_threshold(gold_dev, predDevwm)
         del(predDevwm)
         del(predDev, gold_dev)
-        
-        #Prediction for TEST set
+
+        # Prediction for TEST set
         print('Test...')
+        print('Getting tweet embeddings...')
+        data_x = Variable(torch.from_numpy(X_dev_flat).long())
+        data_f = f_dev_flat
+        X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
+        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128))
+        X_dev_mid = np.fliplr(X_dev_mid)
+
         if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
+            data_x = Variable(torch.FloatTensor(X_test_mid).cuda())
         else:
-            data_x = Variable(torch.from_numpy(X_test_flat).long())
-        data_f = f_test_flat
-        predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain)
-        del(data_x, data_f)
+            data_x = Variable(torch.FloatTensor(X_test_mid))
+
+        predTest = predict(gru, data_x, _, predict_batch_size)
+        del(data_x)
         predTest = predTest.reshape((test_shp[0], test_shp[1]))
     
-        print('CNN+V with threshold = ', thldmn)
+        print('GRU+V with threshold = ', thldmn)
         predTestmn = np.mean(predTest, axis=1)
         predTestmn = (predTestmn >= thldmn).astype(int)
-        predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'wb')
+        predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'wb')
         pkl.dump(predTestmn, predfile)
         predfile.close()
         del(predTestmn)
 
         
-        print('CNN+W with threshold = ', thldwm)
+        print('GRU+W with threshold = ', thldwm)
         wts = np.linspace(1., 0.01, 2000)
         predTestwm = np.average(predTest, axis=1, weights=wts)
         predTestwm = (predTestwm >= thldwm).astype(int)
-        predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'wb')
+        predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'wb')
         pkl.dump(predTestwm, predfile)
         predfile.close()
         del(predTestwm)
 
-
+        
 for iterid in iterations:
-    print(iterid + ': Loading cnn prediction files...')
-    predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'rb')
+    print(iterid + ': Loading gru prediction files...')
+    predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'rb')
     predTestmn = pkl.load(predfile)
-    predictions["cnnv"].extend(predTestmn)
+    predictions["gruv"].extend(predTestmn)
     predfile.close()
         
-    predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'rb')
+    predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'rb')
     predTestwm = pkl.load(predfile)
-    predictions["cnnw"].extend(predTestwm)
+    predictions["gruw"].extend(predTestwm)
     predfile.close()
 
     
 gold_test = np.array(gold_test)
 print("\nResults")
-print("\nCNN+V")
-bootstrap(gold_test, np.array(predictions["cnnv"]))
-predfile = open(pred_dir + 'cnnv.pkl', 'wb')
-pkl.dump(predictions["cnnv"], predfile)
+print("\nGRU+V")
+bootstrap(gold_test, np.array(predictions["gruv"]))
+predfile = open(pred_dir + 'gruv.pkl', 'wb')
+pkl.dump(predictions["gruv"], predfile)
 predfile.close()
-print("\nCNN+W")
-bootstrap(gold_test, np.array(predictions["cnnw"]))
-predfile = open(pred_dir + 'cnnw.pkl', 'wb')
-pkl.dump(predictions["cnnw"], predfile)
+print("\nGRU+W")
+bootstrap(gold_test, np.array(predictions["gruw"]))
+predfile = open(pred_dir + 'gruw.pkl', 'wb')
+pkl.dump(predictions["gruw"], predfile)
 predfile.close()
