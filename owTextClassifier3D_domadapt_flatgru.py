@@ -17,6 +17,17 @@ import pickle as pkl
 import sys
 import math
 import os
+import pynvml as nv
+
+if CUDA_MODE:
+    nv.nvmlInit()
+    deviceCount = nv.nvmlDeviceGetCount()
+    for i in range(deviceCount):
+        handle = nv.nvmlDeviceGetHandleByIndex(i)
+        nvinfo = nv.nvmlDeviceGetMemoryInfo(handle)
+        print ("Total memory:", nvinfo.total)
+        print ("Free memory:", nvinfo.free)
+        print ("Used memory:", nvinfo.used)
 
 from keras.preprocessing import sequence
 
@@ -837,7 +848,8 @@ pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
-
+batch_size_gru=32
+predict_batch_size_gru=64
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
@@ -870,11 +882,11 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     if not (os.path.isfile(pred_dir + 'gruv_' + iterid + '.pkl') and 
         os.path.isfile(pred_dir + 'gruw_' + iterid + '.pkl')):
         #
-        # Pre-train tweet-level vectors
+        #  GRU+V/GRU+W
         #
-    
-        print('Build first model (tweet-level)...')
         num_feats = int(np.sum(np.array(domain)==True))
+
+        print('Build first model (tweet-level)...')
         cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
 
         # Train or load the model
@@ -882,19 +894,44 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
         if CUDA_MODE:
             cnn = cnn.cuda()
-            
-        #
-        #  GRU+V/GRU+W
-        #
-    
+
+        print('Getting dev tweet embeddings...')
+        if CUDA_MODE:
+            data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda())
+        else:
+            data_x = Variable(torch.from_numpy(X_dev_flat).long())
+        data_f = f_dev_flat
+        del(X_dev_flat, f_dev_flat)
+        X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
+        del (data_x, data_f)
+        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128))
+        X_dev_mid = np.fliplr(X_dev_mid)        
+        
+
+        print('Getting test tweet embeddings...')
+        if CUDA_MODE:
+            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
+        else:
+            data_x = Variable(torch.from_numpy(X_test_flat).long())
+        data_f = f_test_flat
+        del(X_test_flat, f_test_flat)
+        X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
+        del(data_x, data_f)
+        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
+        X_test_mid = np.fliplr(X_test_mid)
+
         gru = GRU(128, 128, feats=num_feats)
                 
         if (os.path.isfile(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')):
+            del(cnn)
             print('Loading model weights...')
             gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
             if CUDA_MODE:
                 gru = gru.cuda()
         else:
+            #
+            # Pre-train tweet-level vectors
+            #
             chunk = 256
             X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
             y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
@@ -903,49 +940,57 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 print('accounts ' + str(i) + ' through ' + str(i + last_idx))
                 X_train_chunk = X_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
                 f_train_chunk = f_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
-                data_x = Variable(torch.from_numpy(X_train_chunk).long())
+                if CUDA_MODE:
+                    data_x = Variable(torch.from_numpy(X_train_chunk).long().cuda())
+                else:
+                    data_x = Variable(torch.from_numpy(X_train_chunk).long())
                 data_f = f_train_chunk
                 X_train_chunk = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
+                del(data_x, data_f)
                 X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
                 X_train_chunk = np.fliplr(X_train_chunk)
                 X_train_mid[i:(i + last_idx)] = X_train_chunk
+                del(X_train_chunk, f_train_chunk)
+
                 y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
                 y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
                 y_train_chunk = np.fliplr(y_train_chunk)
                 y_train_mid[i:(i + last_idx)] = y_train_chunk
-         
+                del(y_train_chunk)
+
+            del(X_train_flat, f_train_flat)
+            del(cnn)
 
             if CUDA_MODE:
-                net = net.cuda()
+                gru = gru.cuda()
                 data_x = Variable(torch.from_numpy(X_train_mid).float().cuda())
                 data_y = Variable(torch.from_numpy(y_train_mid).float().cuda())
             else:
                 data_x = Variable(torch.from_numpy(X_train_mid).float())        
                 data_y = Variable(torch.from_numpy(y_train_mid).float())
-            
+            del(X_train_mid, y_train_mid)
+
             print('Train...')
-            batch_size_gru=32
             train(gru, data_x, data_y, _, nb_epoch, batch_size_gru)
             del(data_x, data_y)
             torch.save(gru.state_dict(), model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')
 
           
+        if CUDA_MODE:
+            for i in range(deviceCount):
+                handle = nv.nvmlDeviceGetHandleByIndex(i)
+                nvinfo = nv.nvmlDeviceGetMemoryInfo(handle)
+                print ("Total memory:", nvinfo.total)
+                print ("Free memory:", nvinfo.free)
+                print ("Used memory:", nvinfo.used)
+
         # Prediction for DEV set
         print('Dev...')
-        print('Getting tweet embeddings...')
-        data_x = Variable(torch.from_numpy(X_test_flat).long())
-        data_f = f_test_flat
-        X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
-        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
-        X_test_mid = np.fliplr(X_test_mid)
-        
-        
         if CUDA_MODE:
             data_x = Variable(torch.FloatTensor(X_dev_mid).cuda())
         else:
-            data_x = Variable(torch.FloatTensor(X_dev_mid))
-        
-        predDev = predict(gru, data_x, _, predict_batch_size)
+            data_x = Variable(torch.FloatTensor(X_dev_mid))        
+        predDev = predict(gru, data_x, _, predict_batch_size_gru)
         del(data_x)
         predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
@@ -963,19 +1008,11 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
 
         # Prediction for TEST set
         print('Test...')
-        print('Getting tweet embeddings...')
-        data_x = Variable(torch.from_numpy(X_dev_flat).long())
-        data_f = f_dev_flat
-        X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
-        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128))
-        X_dev_mid = np.fliplr(X_dev_mid)
-
         if CUDA_MODE:
             data_x = Variable(torch.FloatTensor(X_test_mid).cuda())
         else:
             data_x = Variable(torch.FloatTensor(X_test_mid))
-
-        predTest = predict(gru, data_x, _, predict_batch_size)
+        predTest = predict(gru, data_x, _, predict_batch_size_gru)
         del(data_x)
         predTest = predTest.reshape((test_shp[0], test_shp[1]))
     
@@ -997,6 +1034,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         predfile.close()
         del(predTestwm)
 
+        del(gru)
         
 for iterid in iterations:
     print(iterid + ': Loading gru prediction files...')
