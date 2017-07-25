@@ -19,15 +19,15 @@ import math
 import os
 import pynvml as nv
 
-if CUDA_MODE:
-    nv.nvmlInit()
-    deviceCount = nv.nvmlDeviceGetCount()
-    for i in range(deviceCount):
-        handle = nv.nvmlDeviceGetHandleByIndex(i)
-        nvinfo = nv.nvmlDeviceGetMemoryInfo(handle)
-        print ("Total memory:", nvinfo.total)
-        print ("Free memory:", nvinfo.free)
-        print ("Used memory:", nvinfo.used)
+#if CUDA_MODE:
+#    nv.nvmlInit()
+#    deviceCount = nv.nvmlDeviceGetCount()
+#    for i in range(deviceCount):
+#        handle = nv.nvmlDeviceGetHandleByIndex(i)
+#        nvinfo = nv.nvmlDeviceGetMemoryInfo(handle)
+#        print ("Total memory:", nvinfo.total)
+#        print ("Free memory:", nvinfo.free)
+#        print ("Used memory:", nvinfo.used)
 
 from keras.preprocessing import sequence
 
@@ -584,7 +584,7 @@ class CNN(nn.Module):
             out = torch.cat((out,outc,zeros),1)
         elif domain[1] == 1:
             out = torch.cat((out,zeros,outc),1)
-                       
+                             
         return out
 
 class GRU(nn.Module):
@@ -598,11 +598,10 @@ class GRU(nn.Module):
         
     def forward(self, input_seq, test_mode=False):
         out, _ = self.gru(input_seq)
-        out = out.view(out.size()[0] * out.size()[1], -1)
+        out = out.contiguous().view(out.size()[0] * out.size()[1], -1)
         if not test_mode:
             out = self.dropout(out)
         out = self.sigmoid(self.linear(out))
-        out = out.view(input_seq.size()[1], input_seq.size()[0])
         return out
         
 #        batch_size = 32
@@ -624,9 +623,9 @@ class GRU(nn.Module):
         
 def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
     if net.__class__.__name__ == "GRU":
-        pred = np.empty((0, x.size()[1]))
+        pred = np.empty((0, 1))
     else:
-        pred = np.empty(0)
+        pred = np.empty((0, 128))
     batches = math.ceil(x.size()[0] / batch_size)
     for b in range(batches):
         bx = x[b*batch_size:b*batch_size+batch_size]
@@ -797,15 +796,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
         sys.stdout.write('\r[batch: %3d/%3d]' % (b + 1, batches))
         sys.stdout.flush()
         if CUDA_MODE:
-            if net.__class__.__name__ == "GRU":
-                pred = np.concatenate((pred, b_pred.cpu().data.numpy()))
-            else:
-                pred = np.concatenate((pred, b_pred.cpu().data.numpy().flatten()))
+            pred = np.concatenate((pred, b_pred.cpu().data.numpy()))
         else:
-            if net.__class__.__name__ == "GRU":
-                pred = np.concatenate((pred, b_pred.data.numpy()))
-            else:
-                pred = np.concatenate((pred, b_pred.data.numpy().flatten()))
+            pred = np.concatenate((pred, b_pred.data.numpy()))
         del(b_pred)
     sys.stdout.write('\n')
     sys.stdout.flush()
@@ -861,8 +854,10 @@ pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
-batch_size_gru=32
-predict_batch_size_gru=64
+#batch_size_gru=32
+batch_size_gru=3
+#predict_batch_size_gru=64
+predict_batch_size_gru=6
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
@@ -883,6 +878,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
      _, f_test_flat, _, test_shp) = iteration[2]
     (X_dev_flat, _, y_dev, y_dev_flat, _,
      _, f_dev_flat, _, dev_shp) = iteration[3]
+
     
     print('X_train shape:', train_shp)
     print('X_test shape:', test_shp)
@@ -910,28 +906,27 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
 
         print('Getting dev tweet embeddings...')
         if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda())
+            data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda()) # users * tweets x words, reverse order of tweets
         else:
-            data_x = Variable(torch.from_numpy(X_dev_flat).long())
+            data_x = Variable(torch.from_numpy(X_dev_flat).long()) # users * tweets x words, reverse order of tweets
         data_f = f_dev_flat
         del(X_dev_flat, f_dev_flat)
-        X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
+        X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
         del (data_x, data_f)
-        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128))
-        X_dev_mid = np.fliplr(X_dev_mid)        
-        
+        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128)) # users * tweets x hidden -> users x tweets x hidden
+        X_dev_mid = np.fliplr(X_dev_mid) # correct order of tweets
 
         print('Getting test tweet embeddings...')
         if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
+            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda()) # users * tweets x words, reverse order of tweets
         else:
-            data_x = Variable(torch.from_numpy(X_test_flat).long())
+            data_x = Variable(torch.from_numpy(X_test_flat).long()) # users * tweets x words, reverse order of tweets
         data_f = f_test_flat
         del(X_test_flat, f_test_flat)
-        X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
+        X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
         del(data_x, data_f)
-        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
-        X_test_mid = np.fliplr(X_test_mid)
+        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128)) # users * tweets x hidden -> users x tweets x hidden
+        X_test_mid = np.fliplr(X_test_mid) # correct order of tweets
 
         gru = GRU(128, 128, feats=num_feats)
                 
@@ -988,30 +983,23 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             del(data_x, data_y)
             torch.save(gru.state_dict(), model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')
 
-          
-        if CUDA_MODE:
-            for i in range(deviceCount):
-                handle = nv.nvmlDeviceGetHandleByIndex(i)
-                nvinfo = nv.nvmlDeviceGetMemoryInfo(handle)
-                print ("Total memory:", nvinfo.total)
-                print ("Free memory:", nvinfo.free)
-                print ("Used memory:", nvinfo.used)
 
         # Prediction for DEV set
         print('Dev...')
         if CUDA_MODE:
             data_x = Variable(torch.FloatTensor(X_dev_mid).cuda())
         else:
-            data_x = Variable(torch.FloatTensor(X_dev_mid))        
+            data_x = Variable(torch.FloatTensor(X_dev_mid))
         predDev = predict(gru, data_x, _, predict_batch_size_gru)
         del(data_x)
-
+        predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
+        
         predDevmn = np.mean(predDev, axis=1)
         print('Search GRU+V threshold')
         thldmn = get_threshold(gold_dev, predDevmn)
         del(predDevmn)
         
-        wts = np.linspace(1., 0.01, 2000)
+        wts = np.linspace(0.01, 1., 2000)
         predDevwm = np.average(predDev, axis=1, weights=wts)
         print('Search GRU+W threshold')
         thldwm = get_threshold(gold_dev, predDevwm)
@@ -1026,6 +1014,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             data_x = Variable(torch.FloatTensor(X_test_mid))
         predTest = predict(gru, data_x, _, predict_batch_size_gru)
         del(data_x)
+        predTest = predTest.reshape((test_shp[0], test_shp[1]))
     
         print('GRU+V with threshold = ', thldmn)
         predTestmn = np.mean(predTest, axis=1)
@@ -1034,10 +1023,8 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         pkl.dump(predTestmn, predfile)
         predfile.close()
         del(predTestmn)
-
-        
+    
         print('GRU+W with threshold = ', thldwm)
-        wts = np.linspace(1., 0.01, 2000)
         predTestwm = np.average(predTest, axis=1, weights=wts)
         predTestwm = (predTestwm >= thldwm).astype(int)
         predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'wb')
