@@ -602,6 +602,7 @@ class GRU(nn.Module):
         if not test_mode:
             out = self.dropout(out)
         out = self.sigmoid(self.linear(out))
+        out = out.view(input_seq.size()[1], input_seq.size()[0])
         return out
         
 #        batch_size = 32
@@ -622,7 +623,10 @@ class GRU(nn.Module):
     
         
 def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
-    pred = np.empty(0)
+    if net.__class__.__name__ == "GRU":
+        pred = np.empty((0, x.size()[1]))
+    else:
+        pred = np.empty(0)
     batches = math.ceil(x.size()[0] / batch_size)
     for b in range(batches):
         bx = x[b*batch_size:b*batch_size+batch_size]
@@ -792,10 +796,16 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             
         sys.stdout.write('\r[batch: %3d/%3d]' % (b + 1, batches))
         sys.stdout.flush()
-        if CUDA_MODE:     
-            pred = np.concatenate((pred, b_pred.cpu().data.numpy().flatten()))
+        if CUDA_MODE:
+            if net.__class__.__name__ == "GRU":
+                pred = np.concatenate((pred, b_pred.cpu().data.numpy()))
+            else:
+                pred = np.concatenate((pred, b_pred.cpu().data.numpy().flatten()))
         else:
-            pred = np.concatenate((pred, b_pred.data.numpy().flatten()))
+            if net.__class__.__name__ == "GRU":
+                pred = np.concatenate((pred, b_pred.data.numpy()))
+            else:
+                pred = np.concatenate((pred, b_pred.data.numpy().flatten()))
         del(b_pred)
     sys.stdout.write('\n')
     sys.stdout.flush()
@@ -819,7 +829,10 @@ def train(net, x, y, f, nepochs, batch_size):
             bx = torch.transpose(bx, 0, 1)
             y_pred = net(bx)
             del(bx)            
-                                
+            
+            y_pred = y_pred.view((y_pred.size()[0] * y_pred.size()[1]))
+            by = by.view((by.size()[0] * by.size()[1]))
+            
             # Compute loss
             loss = criterion(y_pred, by)
             del(by)
@@ -992,7 +1005,6 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             data_x = Variable(torch.FloatTensor(X_dev_mid))        
         predDev = predict(gru, data_x, _, predict_batch_size_gru)
         del(data_x)
-        predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
         predDevmn = np.mean(predDev, axis=1)
         print('Search GRU+V threshold')
@@ -1014,7 +1026,6 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             data_x = Variable(torch.FloatTensor(X_test_mid))
         predTest = predict(gru, data_x, _, predict_batch_size_gru)
         del(data_x)
-        predTest = predTest.reshape((test_shp[0], test_shp[1]))
     
         print('GRU+V with threshold = ', thldmn)
         predTestmn = np.mean(predTest, axis=1)

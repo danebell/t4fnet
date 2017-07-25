@@ -741,7 +741,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         print('Search GRU+V threshold')
         thldmn = get_threshold(gold_dev, predDevmn)
     
-        wts = np.linspace(1., 0.01, 2000)
+        wts = np.linspace(0.01, 1., 2000)
         predDevwm = np.average(predDev, axis=1, weights=wts)
         print('Search GRU+W threshold')
         thldwm = get_threshold(gold_dev, predDevwm)
