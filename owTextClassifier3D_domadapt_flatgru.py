@@ -854,11 +854,9 @@ pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
-#batch_size_gru=32
-batch_size_gru=3
-#predict_batch_size_gru=64
-predict_batch_size_gru=6
-
+batch_size_gru=32
+predict_batch_size_gru=64
+p
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
 predictions["gruv"] = list()
