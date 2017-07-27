@@ -28,9 +28,10 @@ import os
 # In[3]:
 
 def build_dict(path):
-    features = [None] * 2
+    features = [None] * 3
     features[0] = set()
     features[1] = set()
+    features[2] = set()
     
     sentences = []
     currdir = os.getcwd()
@@ -48,11 +49,14 @@ def build_dict(path):
                         feats = feats[1:len(feats)-1].split(', ')
                         features[0].add(feats[0])
                         features[1].add(feats[2])
+                        if feats[4] != "":
+                            features[2] = feats[4]
                         sentences.append(tweet.strip())
     os.chdir(currdir)
     
     features[0] = list(features[0])
     features[1] = list(features[1])
+    features[2] = list(features[2])
         
     print('Found %i sentences' % len(sentences))
 
@@ -98,6 +102,10 @@ def grab_data(path, dictionary, features):
                 else:
                     feats[1] = float(feats[1])
                 feats[2] = features[1].index(feats[2])
+                if feats[4] not in features[2]:
+                    feats[4] = -1
+                else:
+                    feats[4] = features[2].index(feats[4])
                 account.append((tweet.strip(),feats))
         sentences.append((account_id, account))
     os.chdir(currdir)
@@ -134,13 +142,15 @@ y_neg = [0] * len(x_neg)
 print('%i accounts' % (len(y_pos) + len(y_neg)))
 
 #f = open('ow3df.pkl', 'wb')
-f = open('data_toy/ow3df.pkl', 'wb')
+#f = open('data_toy/ow3df.pkl', 'wb')
+f = open('data_toy/ow3df2.pkl', 'wb')
 pkl.dump((x_pos, i_pos, f_pos, y_pos), f, -1)
 pkl.dump((x_neg, i_neg, f_neg, y_neg), f, -1)
 f.close()
 
 #f = open('ow3df.dict.pkl', 'wb')
-f = open('data_toy/ow3df.dict.pkl', 'wb')
+#f = open('data_toy/ow3df.dict.pkl', 'wb')
+f = open('data_toy/ow3df2.dict.pkl', 'wb')
 pkl.dump(dictionary, f, -1)
 f.close()
 

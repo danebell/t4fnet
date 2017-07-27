@@ -76,7 +76,8 @@ def push_indices(x, start, index_from):
         return x
 
 
-def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
+#def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
+def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
@@ -109,8 +110,10 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     else:
         f = open(path, 'rb')
 
-    ((x_pos, i_pos), y_pos) = pkl.load(f)
-    ((x_neg, i_neg), y_neg) = pkl.load(f)
+    #((x_pos, i_pos), y_pos) = pkl.load(f)
+    #((x_neg, i_neg), y_neg) = pkl.load(f)
+    (x_pos, i_pos, f_pos, y_pos) = pkl.load(f)
+    (x_neg, i_neg, f_neg, y_neg) = pkl.load(f)
     
     f.close()
 
@@ -135,7 +138,8 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    vocab='ow3d.dict.pkl', 
+                    #vocab='ow3d.dict.pkl', 
+                    vocab='data_toy/ow3df.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
@@ -493,12 +497,15 @@ thresholds = map(float,sys.argv[5].split(','))
 
 predmn = None
 predwm = None
+print (pred)
 if pred.ndim==1:
     predmn = pred
 else:
     # account classification with each tweet's classification getting an equal vote
     predmn = np.mean(pred, axis=1)
     #predmn = np.mean(np.round(pred),axis=1)
+
+    print(predmn)
 
     wts = np.linspace(1., 0.01, 2000)
     predwm = np.average(pred, axis=1, weights=wts)
