@@ -24,7 +24,7 @@ from keras.layers import LSTM, SimpleRNN, GRU, Bidirectional
 from keras.layers import Convolution1D, MaxPooling1D, Flatten, GlobalAveragePooling1D
 from keras.layers.core import K
 
-
+basedir = sys.argv[7]
 
 def GlobalSumPooling1D(x):
     return K.sum(x, axis=1)
@@ -99,7 +99,8 @@ def push_indices(x, start, index_from):
     else:
         return x
 
-def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
+#def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
+def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
@@ -131,8 +132,11 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
     else:
         f = open(path, 'rb')
 
-    ((x_pos, i_pos), y_pos) = pkl.load(f)
-    ((x_neg, i_neg), y_neg) = pkl.load(f)
+    #((x_pos, i_pos), y_pos) = pkl.load(f)
+    #((x_neg, i_neg), y_neg) = pkl.load(f)
+    (x_pos, i_pos, f_pos, y_pos) = pkl.load(f)
+    (x_neg, i_neg, f_neg, y_neg) = pkl.load(f)
+
     
     f.close()
 
@@ -182,7 +186,8 @@ def load_data(path='ow3d.pkl', nb_words=None, skip_top=0,
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    vocab='ow3d.dict.pkl', 
+                    vocab='ow3df.dict.pkl', 
+                    #vocab='ow3d.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
@@ -582,28 +587,29 @@ del iteration
 print('Build first model (tweet-level)...')
 model1 = Sequential()
 
-if (sys.argv[1] == "embs"):
-    model1.add(Embedding(max_features + 3,
-                         emb_dim,
-                         input_length=maxlen,
-                         weights=[embeddings],
-                        name="emb"))#,
-                         #mask_zero=True))
-    model1.add(Convolution1D(nb_filter=nb_filter,
-                             filter_length=filter_length,
-                             border_mode='valid',
-                             activation='relu',
-                             subsample_length=1,
-                             name="conv1d"))
-    model1.add(MaxPooling1D(pool_length=pool_length))
-    model1.add(Flatten())
-    model1.add(Dense(128, name="dense1"))
-    model1.add(Activation('relu'))
-    model1.compile(loss='binary_crossentropy',
-                   optimizer='adam',
-                   metrics=['accuracy'])
-
-elif (sys.argv[1] == "cnn" or sys.argv[2] == "pre"):
+#if (sys.argv[1] == "embs"):
+#    model1.add(Embedding(max_features + 3,
+#                         emb_dim,
+#                         input_length=maxlen,
+#                         weights=[embeddings],
+#                        name="emb"))#,
+#                         #mask_zero=True))
+#    model1.add(Convolution1D(nb_filter=nb_filter,
+#                             filter_length=filter_length,
+#                             border_mode='valid',
+#                             activation='relu',
+#                             subsample_length=1,
+#                             name="conv1d"))
+#    model1.add(MaxPooling1D(pool_length=pool_length))
+#    model1.add(Flatten())
+#    model1.add(Dense(128, name="dense1"))
+#    model1.add(Activation('relu'))
+#    model1.compile(loss='binary_crossentropy',
+#                   optimizer='adam',
+#                   metrics=['accuracy'])
+#
+#elif (sys.argv[1] == "cnn" or sys.argv[2] == "pre"):
+if (sys.argv[1] == "cnn" or sys.argv[2] == "pre"):
     model1.add(Embedding(max_features + 3,
                          emb_dim,
                          input_length=maxlen,
@@ -627,6 +633,29 @@ elif (sys.argv[1] == "cnn" or sys.argv[2] == "pre"):
                    optimizer='adam',
                    metrics=['accuracy'])
 
+else:
+    model1.add(Embedding(max_features + 3,
+                         emb_dim,
+                         input_length=maxlen,
+                         weights=[embeddings],
+                        name="emb"))#,
+                         #mask_zero=True))
+    model1.add(Convolution1D(nb_filter=nb_filter,
+                             filter_length=filter_length,
+                             border_mode='valid',
+                             activation='relu',
+                             subsample_length=1,
+                             name="conv1d"))
+    model1.add(MaxPooling1D(pool_length=pool_length))
+    model1.add(Flatten())
+    model1.add(Dense(128, name="dense1"))
+    model1.add(Activation('relu'))
+    model1.add(Dropout(0.4, name="dense2"))
+    model1.add(Dense(1, name="dense3"))
+    model1.add(Activation('sigmoid'))
+    model1.compile(loss='binary_crossentropy',
+                   optimizer='adam',
+                   metrics=['accuracy'])
 
 # In[14]:
 
@@ -639,11 +668,12 @@ if (sys.argv[2] == "pre"):
     print('Train...')
     model1.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
                validation_data=(X_test_shuff, y_test_shuff))
-    model1.save_weights('models/tweet_classifier_' + iterid + '.h5')
+    model1.save_weights(basedir + '/models/tweet_classifier_' + iterid + '.h5')
 
-elif (sys.argv[1] == "cnn" ):
+#elif (sys.argv[1] == "cnn" ):
+else:
         print('Load model...')
-        model1.load_weights('models/tweet_classifier_' + iterid + '.h5')
+        model1.load_weights(basedir + '/models/tweet_classifier_' + iterid + '.h5')
 
 
 if (sys.argv[1] == "cnn"):
@@ -663,7 +693,7 @@ if (sys.argv[1] == "cnn"):
     pred = model1.predict(X_test_flat)
     pred = pred.reshape((test_shp[0], test_shp[1]))
 
-    predfile = open('predictions/cnn_' + iterid + '_' + evalset + '.pkl', 'wb')
+    predfile = open(basedir + '/predictions/cnn_' + iterid + '_' + evalset + '.pkl', 'wb')
     pkl.dump(pred, predfile)
     predfile.close()
 
@@ -685,26 +715,26 @@ if (sys.argv[1] == "cnn"):
 
     print('Unweighted mean')
 
-    predfile = open('predictions/cnn_mn_' + iterid + '_' + evalset + '.pkl', 'wb')
+    predfile = open(basedir + '/predictions/cnn_mn_' + iterid + '_' + evalset + '.pkl', 'wb')
     pkl.dump(predmn, predfile)
     predfile.close()
 
-    (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn)
-    global_precision[1] += precision
-    global_recall[1] += recall
-    global_microf1[1] += microf1
-    global_macrof1[1] += macrof1
+#    (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn)
+#    global_precision[1] += precision
+#    global_recall[1] += recall
+#    global_microf1[1] += microf1
+#    global_macrof1[1] += macrof1
 
-    predfile = open('predictions/cnn_wm_' + iterid + '_' + evalset + '.pkl', 'wb')
+    predfile = open(basedir + '/predictions/cnn_wm_' + iterid + '_' + evalset + '.pkl', 'wb')
     pkl.dump(predwm, predfile)
     predfile.close()
 
     print('\nWeighted mean')
-    (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm)
-    global_precision[0] += precision
-    global_recall[0] += recall
-    global_microf1[0] += microf1
-    global_macrof1[0] += macrof1
+#    (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm)
+#    global_precision[0] += precision
+#    global_recall[0] += recall
+#    global_microf1[0] += microf1
+#    global_macrof1[0] += macrof1
 
 elif (sys.argv[1] == "embs"):
     # In[ ]:
@@ -725,44 +755,44 @@ else:
 
     # In[25]:
 
-#    intermediate = Sequential()
-#    intermediate.add(Embedding(max_features + 3,
-#                         emb_dim,
-#                         input_length=maxlen,
-#                         weights=[embeddings]
-#                        ))#,
-#                         #mask_zero=True))
-#    intermediate.add(Convolution1D(nb_filter=nb_filter,
-#                             filter_length=filter_length,
-#                             border_mode='valid',
-#                             activation='relu',
-#                             subsample_length=1))
-#    intermediate.add(MaxPooling1D(pool_length=pool_length))
-#    intermediate.add(Flatten())
-#    intermediate.add(Dense(128))
-#    intermediate.add(Activation('relu'))
-#
-#    for l in range(len(intermediate.layers)):
-#        intermediate.layers[l].set_weights(model1.layers[l].get_weights())
-#        intermediate.layers[l]
-#
-#    intermediate.compile(loss='binary_crossentropy',
-#                         optimizer='adam',
-#                         metrics=['accuracy'])
-#
-#
-#    # In[26]:
-#
-#    intermediate.summary()
-#
-#
-#    # In[28]:
-#
-#    X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
-    embfile = open('cnn_embs/embs_' + iterid + '.pkl', 'rb')
-    X_test_embs = pkl.load(embfile)
-    embfile.close()
-    X_test_mid = X_test_embs
+    intermediate = Sequential()
+    intermediate.add(Embedding(max_features + 3,
+                         emb_dim,
+                         input_length=maxlen,
+                         weights=[embeddings]
+                        ))#,
+                         #mask_zero=True))
+    intermediate.add(Convolution1D(nb_filter=nb_filter,
+                             filter_length=filter_length,
+                             border_mode='valid',
+                             activation='relu',
+                             subsample_length=1))
+    intermediate.add(MaxPooling1D(pool_length=pool_length))
+    intermediate.add(Flatten())
+    intermediate.add(Dense(128))
+    intermediate.add(Activation('relu'))
+
+    for l in range(len(intermediate.layers)):
+        intermediate.layers[l].set_weights(model1.layers[l].get_weights())
+        intermediate.layers[l]
+
+    intermediate.compile(loss='binary_crossentropy',
+                         optimizer='adam',
+                         metrics=['accuracy'])
+
+
+    # In[26]:
+
+    intermediate.summary()
+
+
+    # In[28]:
+
+    X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
+#    embfile = open('cnn_embs/embs_' + iterid + '.pkl', 'rb')
+#    X_test_embs = pkl.load(embfile)
+#    embfile.close()
+#    X_test_mid = X_test_embs
     X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
     X_test_mid = np.fliplr(X_test_mid)
     y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
@@ -817,10 +847,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=(X_test_mid, y_test))
-            modelRNN.save_weights('models/rnn_' + iterid + '.h5')
+            modelRNN.save_weights(basedir + '/models/rnn_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRNN.load_weights('models/rnn_' + iterid + '.h5')
+            modelRNN.load_weights(basedir + '/models/rnn_' + iterid + '.h5')
 
 
         # In[33]:
@@ -835,7 +865,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/rnn_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/rnn_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -890,10 +920,10 @@ else:
                          batch_size=batch_size,
                          nb_epoch=nb_epoch,
                          validation_data=(X_test_mid, y_test))
-            modelRNN.save_weights('models/birnn_' + iterid + '.h5')
+            modelRNN.save_weights(basedir + '/models/birnn_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRNN.load_weights('models/birnn_' + iterid + '.h5')
+            modelRNN.load_weights(basedir + '/models/birnn_' + iterid + '.h5')
 
         # In[33]:
 
@@ -907,7 +937,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/birnn_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/birnn_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -970,10 +1000,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=(X_test_mid, y_test))
-            modelStack.save_weights('models/stacked-rnn_' + iterid + '.h5')
+            modelStack.save_weights(basedir + '/models/stacked-rnn_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelStack.load_weights('models/stacked-rnn_' + iterid + '.h5')
+            modelStack.load_weights(basedir + '/models/stacked-rnn_' + iterid + '.h5')
 
 
         # In[33]:
@@ -988,7 +1018,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/stacked-rnn_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/stacked-rnn_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1051,10 +1081,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=(X_test_mid, y_test))
-            modelMLP.save_weights('models/mlp_' + iterid + '.h5')
+            modelMLP.save_weights(basedir + '/models/mlp_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelMLP.load_weights('models/mlp_' + iterid + '.h5')
+            modelMLP.load_weights(basedir + '/models/mlp_' + iterid + '.h5')
 
 
         # In[33]:
@@ -1069,7 +1099,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/mlp_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/mlp_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1128,10 +1158,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=(X_test_mid, y_test_mid))
-            modelRWeight.save_weights('models/rnn-rweights_' + iterid + '.h5')
+            modelRWeight.save_weights(basedir + '/models/rnn-rweights_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRWeight.load_weights('models/rnn-rweights_' + iterid + '.h5')
+            modelRWeight.load_weights(basedir + '/models/rnn-rweights_' + iterid + '.h5')
 
 
         # In[33]:
@@ -1144,10 +1174,17 @@ else:
 
         # In[20]:
 
+        print(X_test_mid)
+        print(np.shape(X_test_mid))
         pred = modelRWeight.predict(X_test_mid)
+        print(pred)
+        print(np.shape(pred))
         pred = pred.reshape((test_shp[0], test_shp[1]))
+        print(pred)
+        print(np.shape(pred))
+        sys.exit()
 
-        predfile = open('predictions/rnn-rweights_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/rnn-rweights_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1169,27 +1206,27 @@ else:
 
         print('Unweighted mean')
 
-        predfile = open('predictions/rnn-rweights_nm_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/rnn-rweights_nm_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(predmn, predfile)
         predfile.close()
 
-        (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn)
-        global_precision[0] += precision
-        global_recall[0] += recall
-        global_microf1[0] += microf1
-        global_macrof1[0] += macrof1
+#        (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predmn)
+#        global_precision[0] += precision
+#        global_recall[0] += recall
+#        global_microf1[0] += microf1
+#        global_macrof1[0] += macrof1
 
         print('\nWeighted mean')
 
-        predfile = open('predictions/rnn-rweights_wm_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/rnn-rweights_wm_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(predwm, predfile)
         predfile.close()
 
-        (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm)
-        global_precision[1] += precision
-        global_recall[1] += recall
-        global_microf1[1] += microf1
-        global_macrof1[1] += macrof1
+#        (acc, precision, recall, microf1, macrof1, baseline, p) = bootstrap(y, predwm)
+#        global_precision[1] += precision
+#        global_recall[1] += recall
+#        global_microf1[1] += microf1
+#        global_macrof1[1] += macrof1
 
 
     elif (sys.argv[1] == "pool"):
@@ -1231,10 +1268,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=(X_test_mid, y_test))
-            modelPool.save_weights('models/cnn-pooling_' + iterid + '.h5')
+            modelPool.save_weights(basedir + '/models/cnn-pooling_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelPool.load_weights('models/cnn-pooling_' + iterid + '.h5')
+            modelPool.load_weights(basedir + '/models/cnn-pooling_' + iterid + '.h5')
 
 
         # In[33]:
@@ -1249,7 +1286,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-pooling_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/cnn-pooling_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1299,10 +1336,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=(X_test_mid, y_test))
-            modelPool.save_weights('models/cnn-pooling_' + iterid + '.h5')
+            modelPool.save_weights(basedir + '/models/cnn-pooling_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelPool.load_weights('models/cnn-pooling_' + iterid + '.h5')
+            modelPool.load_weights(basedir + '/models/cnn-pooling_' + iterid + '.h5')
 
 
         # In[33]:
@@ -1317,7 +1354,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-pooling_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/cnn-pooling_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1379,10 +1416,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/poolrecency_' + iterid + '.h5')
+            modelRelu.save_weights(basedir + '/models/poolrecency_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/poolrecency_' + iterid + '.h5')
+            modelRelu.load_weights(basedir + '/models/poolrecency_' + iterid + '.h5')
 
 
 
@@ -1398,7 +1435,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/poolrecency_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/poolrecency_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1462,10 +1499,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/cnn-relu_' + iterid + '.h5')
+            modelRelu.save_weights(basedir + '/models/cnn-relu_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/cnn-relu_' + iterid + '.h5')
+            modelRelu.load_weights(basedir + '/models/cnn-relu_' + iterid + '.h5')
 
 
 
@@ -1481,7 +1518,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-relu_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/cnn-relu_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1543,10 +1580,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/cnn-sigrelu_' + iterid + '.h5')
+            modelRelu.save_weights(basedir + '/models/cnn-sigrelu_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/cnn-sigrelu_' + iterid + '.h5')
+            modelRelu.load_weights(basedir + '/models/cnn-sigrelu_' + iterid + '.h5')
 
 
 
@@ -1562,7 +1599,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/cnn-sigrelu_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/cnn-sigrelu_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1625,10 +1662,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/rnn-relu_' + iterid + '.h5')
+            modelRelu.save_weights(basedir + '/models/rnn-relu_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/rnn-relu_' + iterid + '.h5')
+            modelRelu.load_weights(basedir + '/models/rnn-relu_' + iterid + '.h5')
 
         # In[33]:
 
@@ -1642,7 +1679,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/rnn-relu_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/rnn-relu_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1700,10 +1737,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=(X_test_mid, y_test))
-            modelAttention.save_weights('models/cnn-attention_' + iterid + '.h5')
+            modelAttention.save_weights(basedir + '/models/cnn-attention_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelAttention.load_weights('models/cnn-attention_' + iterid + '.h5')
+            modelAttention.load_weights(basedir + '/models/cnn-attention_' + iterid + '.h5')
 
 
         # In[33]:
@@ -1716,7 +1753,7 @@ else:
         pred = modelAttention.predict(X_test_mid)
         pred = pred.flatten()
         
-        predfile = open('predictions/cnn-attention_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/cnn-attention_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 
@@ -1784,10 +1821,10 @@ else:
                           batch_size=batch_size,
                           nb_epoch=nb_epoch,
                           validation_data=([wtsTest, X_test_mid], y_test))
-            modelRelu.save_weights('models/softmax_' + iterid + '.h5')
+            modelRelu.save_weights(basedir + '/models/softmax_' + iterid + '.h5')
         else:
             print('Load model...')
-            modelRelu.load_weights('models/sotfmax_' + iterid + '.h5')
+            modelRelu.load_weights(basedir + '/models/sotfmax_' + iterid + '.h5')
 
         # In[33]:
 
@@ -1801,7 +1838,7 @@ else:
         pred = (pred >= 0.5).astype(int)
         y = y_test.flatten()
 
-        predfile = open('predictions/sotfmax_' + iterid + '_' + evalset + '.pkl', 'wb')
+        predfile = open(basedir + '/predictions/sotfmax_' + iterid + '_' + evalset + '.pkl', 'wb')
         pkl.dump(pred, predfile)
         predfile.close()
 

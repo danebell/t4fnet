@@ -12,6 +12,7 @@ import numpy as np
 np.random.seed(947) # for reproducibility
 import pickle as pkl
 import sys
+import os
 
 from keras.preprocessing import sequence
 from keras.models import Sequential
@@ -511,224 +512,282 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     (X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, train_shp) = iteration[1]
     (X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff, test_shp) = iteration[2]
     (X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff, dev_shp) = iteration[3]
-
     gold_dev = y_dev.flatten()
     gold_test.extend(y_test.flatten())
 
-    #
-    # Pre-train tweet-level vectors
-    #
+    if (os.path.isfile('cnngru/predictions/cnnv_' + iterid + '.pkl') and 
+        os.path.isfile('cnngru/predictions/cnnw_' + iterid + '.pkl') and
+        os.path.isfile('cnngru/predictions/gruv_' + iterid + '.pkl') and 
+        os.path.isfile('cnngru/predictions/gruw_' + iterid + '.pkl')):
+        print('Loading cnn prediction files...')
+        predfile = open('cnngru/predictions/cnnv_' + iterid + '.pkl', 'rb')
+        predTestmn = pkl.load(predfile)
+        predictions["cnnv"].extend(predTestmn)
+        predfile.close()
+        
+        predfile = open('cnngru/predictions/cnnw_' + iterid + '.pkl', 'rb')
+        predTestwm = pkl.load(predfile)
+        predictions["cnnw"].extend(predTestwm)
+        predfile.close()
+        
+        print('Loading gru prediction files...')
+        predfile = open('cnngru/predictions/gruv_' + iterid + '.pkl', 'rb')
+        predTestmn = pkl.load(predfile)
+        predictions["gruv"].extend(predTestmn)
+        predfile.close()
+        
+        predfile = open('cnngru/predictions/gruw_' + iterid + '.pkl', 'rb')
+        predTestwm = pkl.load(predfile)
+        predictions["gruw"].extend(predTestwm)
+        predfile.close()
+    else:    
+        #
+        # Pre-train tweet-level vectors
+        #
+    
+        print('Build first model (tweet-level)...')
+        modelPre = Sequential()
+        modelPre.add(Embedding(max_features + 3,
+                             emb_dim,
+                             input_length=maxlen,
+                             weights=[embeddings],
+                            name="emb"))
+        modelPre.add(Convolution1D(nb_filter=nb_filter,
+                                 filter_length=filter_length,
+                                 border_mode='valid',
+                                 activation='relu',
+                                 subsample_length=1,
+                                 name="conv1d"))
+        modelPre.add(MaxPooling1D(pool_length=pool_length))
+        modelPre.add(Flatten())
+        modelPre.add(Dense(128, name="dense1"))
+        modelPre.add(Activation('relu'))
+        modelPre.add(Dropout(0.4, name="dense2"))
+        modelPre.add(Dense(1, name="dense3"))
+        modelPre.add(Activation('sigmoid'))
+        modelPre.compile(loss='binary_crossentropy',
+                       optimizer='adam',
+                       metrics=['accuracy'])
+        modelPre.summary()
 
-    print('Build first model (tweet-level)...')
-    modelPre = Sequential()
-    modelPre.add(Embedding(max_features + 3,
-                         emb_dim,
-                         input_length=maxlen,
-                         weights=[embeddings],
-                        name="emb"))
-    modelPre.add(Convolution1D(nb_filter=nb_filter,
-                             filter_length=filter_length,
-                             border_mode='valid',
-                             activation='relu',
-                             subsample_length=1,
-                             name="conv1d"))
-    modelPre.add(MaxPooling1D(pool_length=pool_length))
-    modelPre.add(Flatten())
-    modelPre.add(Dense(128, name="dense1"))
-    modelPre.add(Activation('relu'))
-    modelPre.add(Dropout(0.4, name="dense2"))
-    modelPre.add(Dense(1, name="dense3"))
-    modelPre.add(Activation('sigmoid'))
-    modelPre.compile(loss='binary_crossentropy',
-                   optimizer='adam',
-                   metrics=['accuracy'])
-    modelPre.summary()
-
-    # Train the model
-    print('Train...')
-    modelPre.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
-               validation_data=(X_test_shuff, y_test_shuff))
-    modelPre.save_weights('models/tweet_classifier_' + iterid + '.h5')
-
-    #
-    #  CNN+V/CNN+W
-    #
-
-    # Prediction for DEV set
-    score, acc = modelPre.evaluate(X_dev_flat, y_dev_flat, batch_size=batch_size)
-    print('Dev score:', score)
-    print('Dev accuracy:', acc)
-    predDev = modelPre.predict(X_dev_flat)
-    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
-
-    predDevmn = np.mean(predDev, axis=1)
-    print('Search CNN+V threshold')
-    thldmn = get_threshold(gold_dev, predDevmn)
-
-    wts = np.linspace(1., 0.01, 2000)
-    predDevwm = np.average(predDev, axis=1, weights=wts)
-    print('Search CNN+W threshold')
-    thldwm = get_threshold(gold_dev, predDevwm)
-
-    # Prediction for TEST set
-    score, acc = modelPre.evaluate(X_test_flat, y_test_flat, batch_size=batch_size)
-    print('Test score:', score)
-    print('Test accuracy:', acc)
-    predTest = modelPre.predict(X_test_flat)
-    predTest = predTest.reshape((test_shp[0], test_shp[1]))
-
-    predTestmn = np.mean(predTest, axis=1)
-    predTestmn = (predTestmn >= thldmn).astype(int)
-    predictions["cnnv"].extend(predTestmn)
-
-    wts = np.linspace(1., 0.01, 2000)
-    predTestwm = np.average(predTest, axis=1, weights=wts)
-    predTestwm = (predTestwm >= thldwm).astype(int)
-    predictions["cnnw"].extend(predTestwm)
-
-
-    #
-    # Intermediate data structure to get the input for GRU+V/GRU+W
-    #
-    #
-
-
-    intermediate = Sequential()
-    intermediate.add(Embedding(max_features + 3,
-                         emb_dim,
-                         input_length=maxlen,
-                         weights=[embeddings]
-                        ))
-    intermediate.add(Convolution1D(nb_filter=nb_filter,
-                             filter_length=filter_length,
-                             border_mode='valid',
-                             activation='relu',
-                             subsample_length=1))
-    intermediate.add(MaxPooling1D(pool_length=pool_length))
-    intermediate.add(Flatten())
-    intermediate.add(Dense(128))
-    intermediate.add(Activation('relu'))
-
-    for l in range(len(intermediate.layers)):
-        intermediate.layers[l].set_weights(modelPre.layers[l].get_weights())
-        intermediate.layers[l]
-
-    intermediate.compile(loss='binary_crossentropy',
-                         optimizer='adam',
-                         metrics=['accuracy'])
-    intermediate.summary()
-
-
-    X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
-    X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
-    X_test_mid = np.fliplr(X_test_mid)
-    y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
-    y_test_mid = np.fliplr(y_test_mid)
-
-
-    X_dev_mid = K.eval(intermediate(K.variable(X_dev_flat)))
-    X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128))
-    X_dev_mid = np.fliplr(X_dev_mid)
-    y_dev_mid = y_dev_flat.reshape((dev_shp[0], dev_shp[1], 1))
-    y_dev_mid = np.fliplr(y_dev_mid)
-
-
-    #
-    #  GRU+V/GRU+W
-    #
-
-    batch_size = 32
-
-    modelGRU = Sequential()
-    modelGRU.add(GRU(128,
-                   dropout_W=0.2,
-                   dropout_U=0.2,
-                   input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
-                   return_sequences=True))
-    modelGRU.add(TimeDistributed(Dense(1, activation='sigmoid')))
-
-    # Compile
-    modelGRU.compile(loss='binary_crossentropy',
-                  optimizer='adam',
-                  metrics=['accuracy'])
-    modelGRU.summary()
-
-    chunk = 256
-    X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
-    y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
-    for i in range(0, train_shp[0], chunk):
-        last_idx = min(chunk, train_shp[0] - i)
-        print('accounts ' + str(i) + ' through ' + str(i + last_idx))
-        X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
-        X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
-        X_train_chunk = np.fliplr(X_train_chunk)
-        X_train_mid[i:(i + last_idx)] = X_train_chunk
-        y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
-        y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
-        y_train_chunk = np.fliplr(y_train_chunk)
-        y_train_mid[i:(i + last_idx)] = y_train_chunk
-
-
-    # Train the model
-    modelGRU.fit(X_train_mid,
-                  y_train_mid,
-                  batch_size=batch_size,
-                  nb_epoch=nb_epoch,
-                  validation_data=(X_dev_mid, y_dev_mid))
-    modelGRU.save_weights('models/gru_' + iterid + '.h5')
-
-    # Prediction for DEV set
-    score, acc = modelGRU.evaluate(X_dev_mid, y_dev_mid, batch_size=batch_size)
-    print('Dev score:', score)
-    print('Dev accuracy:', acc)
-    predDev = modelGRU.predict(X_dev_mid)
-    predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
-
-    predDevmn = np.mean(predDev, axis=1)
-    print('Search GRU+V threshold')
-    thldmn = get_threshold(gold_dev, predDevmn)
-
-    wts = np.linspace(1., 0.01, 2000)
-    predDevwm = np.average(predDev, axis=1, weights=wts)
-    print('Search GRU+W threshold')
-    thldwm = get_threshold(gold_dev, predDevwm)
-
-    # Prediction for TEST set
-    score, acc = modelGRU.evaluate(X_test_mid, y_test_mid, batch_size=batch_size)
-    print('Test score:', score)
-    print('Test accuracy:', acc)
-    predTest = modelGRU.predict(X_test_mid)
-    predTest = predTest.reshape((test_shp[0], test_shp[1]))
-
-    predTestmn = np.mean(predTest, axis=1)
-    predTestmn = (predTestmn >= thldmn).astype(int)
-    predictions["gruv"].extend(predTestmn)
-
-    wts = np.linspace(1., 0.01, 2000)
-    predTestwm = np.average(predTest, axis=1, weights=wts)
-    predTestwm = (predTestwm >= thldwm).astype(int)
-    predictions["gruw"].extend(predTestwm)
+        # Train or load the model
+        if (os.path.isfile('cnngru/models/tweet_classifier_' + iterid + '.h5')):
+            print('Loading model weights...')
+            modelPre.load_weights('cnngru/models/tweet_classifier_' + iterid + '.h5')
+        else:
+            print('Training...')
+            modelPre.fit(X_train_shuff, y_train_shuff, batch_size=batch_size, nb_epoch=nb_epoch,
+                       validation_data=(X_test_shuff, y_test_shuff))
+            modelPre.save_weights('cnngru/models/tweet_classifier_' + iterid + '.h5')
+    
+        #
+        #  CNN+V/CNN+W
+        #
+    
+        if (os.path.isfile('cnngru/predictions/cnnv_' + iterid + '.pkl') and 
+            os.path.isfile('cnngru/predictions/cnnw_' + iterid + '.pkl')):
+            print('Loading cnn prediction files...')
+            predfile = open('cnngru/predictions/cnnv_' + iterid + '.pkl', 'rb')
+            predTestmn = pkl.load(predfile)
+            predictions["cnnv"].extend(predTestmn)
+            predfile.close()
+            
+            predfile = open('cnngru/predictions/cnnw_' + iterid + '.pkl', 'rb')
+            predTestwm = pkl.load(predfile)
+            predictions["cnnw"].extend(predTestwm)
+            predfile.close()
+        else:
+            # Prediction for DEV set
+            score, acc = modelPre.evaluate(X_dev_flat, y_dev_flat, batch_size=batch_size)
+            print('Dev score:', score)
+            print('Dev accuracy:', acc)
+            predDev = modelPre.predict(X_dev_flat)
+            predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
+        
+            predDevmn = np.mean(predDev, axis=1)
+            print('Search CNN+V threshold')
+            thldmn = get_threshold(gold_dev, predDevmn)
+        
+            wts = np.linspace(1., 0.01, 2000)
+            predDevwm = np.average(predDev, axis=1, weights=wts)
+            print('Search CNN+W threshold')
+            thldwm = get_threshold(gold_dev, predDevwm)
+        
+            # Prediction for TEST set
+            score, acc = modelPre.evaluate(X_test_flat, y_test_flat, batch_size=batch_size)
+            print('Test score:', score)
+            print('Test accuracy:', acc)
+            predTest = modelPre.predict(X_test_flat)
+            predTest = predTest.reshape((test_shp[0], test_shp[1]))
+        
+            predTestmn = np.mean(predTest, axis=1)
+            predTestmn = (predTestmn >= thldmn).astype(int)
+            predictions["cnnv"].extend(predTestmn)
+            predfile = open('cnngru/predictions/cnnv_' + iterid + '.pkl', 'wb')
+            pkl.dump(predTestmn, predfile)
+            predfile.close()
+            
+            wts = np.linspace(1., 0.01, 2000)
+            predTestwm = np.average(predTest, axis=1, weights=wts)
+            predTestwm = (predTestwm >= thldwm).astype(int)
+            predictions["cnnw"].extend(predTestwm)
+            predfile = open('cnngru/predictions/cnnw_' + iterid + '.pkl', 'wb')
+            pkl.dump(predTestwm, predfile)
+            predfile.close()
+        
+        #
+        # Intermediate data structure to get the input for GRU+V/GRU+W
+        #
+        #
+    
+    
+        intermediate = Sequential()
+        intermediate.add(Embedding(max_features + 3,
+                             emb_dim,
+                             input_length=maxlen,
+                             weights=[embeddings]
+                            ))
+        intermediate.add(Convolution1D(nb_filter=nb_filter,
+                                 filter_length=filter_length,
+                                 border_mode='valid',
+                                 activation='relu',
+                                 subsample_length=1))
+        intermediate.add(MaxPooling1D(pool_length=pool_length))
+        intermediate.add(Flatten())
+        intermediate.add(Dense(128))
+        intermediate.add(Activation('relu'))
+    
+        for l in range(len(intermediate.layers)):
+            intermediate.layers[l].set_weights(modelPre.layers[l].get_weights())
+            intermediate.layers[l]
+    
+        intermediate.compile(loss='binary_crossentropy',
+                             optimizer='adam',
+                             metrics=['accuracy'])
+        intermediate.summary()
+    
+    
+        X_test_mid = K.eval(intermediate(K.variable(X_test_flat)))
+        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128))
+        X_test_mid = np.fliplr(X_test_mid)
+        y_test_mid = y_test_flat.reshape((test_shp[0], test_shp[1], 1))
+        y_test_mid = np.fliplr(y_test_mid)
+    
+    
+        X_dev_mid = K.eval(intermediate(K.variable(X_dev_flat)))
+        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128))
+        X_dev_mid = np.fliplr(X_dev_mid)
+        y_dev_mid = y_dev_flat.reshape((dev_shp[0], dev_shp[1], 1))
+        y_dev_mid = np.fliplr(y_dev_mid)
+    
+    
+        #
+        #  GRU+V/GRU+W
+        #
+    
+        batch_size = 32
+    
+        modelGRU = Sequential()
+        modelGRU.add(GRU(128,
+                       dropout_W=0.2,
+                       dropout_U=0.2,
+                       input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
+                       return_sequences=True))
+        modelGRU.add(TimeDistributed(Dense(1, activation='sigmoid')))
+    
+        # Compile
+        modelGRU.compile(loss='binary_crossentropy',
+                      optimizer='adam',
+                      metrics=['accuracy'])
+        modelGRU.summary()
+    
+        chunk = 256
+        X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+        y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
+        for i in range(0, train_shp[0], chunk):
+            last_idx = min(chunk, train_shp[0] - i)
+            print('accounts ' + str(i) + ' through ' + str(i + last_idx))
+            X_train_chunk = K.eval(intermediate(K.variable(X_train_flat[i * maxtweets : (i + last_idx) * maxtweets])))
+            X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+            X_train_chunk = np.fliplr(X_train_chunk)
+            X_train_mid[i:(i + last_idx)] = X_train_chunk
+            y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
+            y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
+            y_train_chunk = np.fliplr(y_train_chunk)
+            y_train_mid[i:(i + last_idx)] = y_train_chunk
+    
+    
+        # Train or Load the model
+        if (os.path.isfile('cnngru/models/gru_' + iterid + '.h5')):
+            print('Loading model weights...')
+            modelGRU.load_weights('cnngru/models/gru_' + iterid + '.h5')
+        else:
+            print('Training...')
+            modelGRU.fit(X_train_mid,
+                         y_train_mid,
+                         batch_size=batch_size,
+                         nb_epoch=nb_epoch,
+                         validation_data=(X_dev_mid, y_dev_mid))
+            modelGRU.save_weights('cnngru/models/gru_' + iterid + '.h5')
+    
+        # Prediction for DEV set
+        score, acc = modelGRU.evaluate(X_dev_mid, y_dev_mid, batch_size=batch_size)
+        print('Dev score:', score)
+        print('Dev accuracy:', acc)
+        predDev = modelGRU.predict(X_dev_mid)
+        predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
+    
+        predDevmn = np.mean(predDev, axis=1)
+        print('Search GRU+V threshold')
+        thldmn = get_threshold(gold_dev, predDevmn)
+    
+        wts = np.linspace(0.01, 1., 2000)
+        predDevwm = np.average(predDev, axis=1, weights=wts)
+        print('Search GRU+W threshold')
+        thldwm = get_threshold(gold_dev, predDevwm)
+    
+        # Prediction for TEST set
+        score, acc = modelGRU.evaluate(X_test_mid, y_test_mid, batch_size=batch_size)
+        print('Test score:', score)
+        print('Test accuracy:', acc)
+        predTest = modelGRU.predict(X_test_mid)
+        predTest = predTest.reshape((test_shp[0], test_shp[1]))
+    
+        predTestmn = np.mean(predTest, axis=1)
+        predTestmn = (predTestmn >= thldmn).astype(int)
+        predictions["gruv"].extend(predTestmn)
+        predfile = open('cnngru/predictions/gruv_' + iterid + '.pkl', 'wb')
+        pkl.dump(predTestmn, predfile)
+        predfile.close()
+    
+        wts = np.linspace(1., 0.01, 2000)
+        predTestwm = np.average(predTest, axis=1, weights=wts)
+        predTestwm = (predTestwm >= thldwm).astype(int)
+        predictions["gruw"].extend(predTestwm)
+        predfile = open('cnngru/predictions/gruw_' + iterid + '.pkl', 'wb')
+        pkl.dump(predTestwm, predfile)
+        predfile.close()
 
 
 gold_test = np.array(gold_test)
 print("\nResults")
 print("\nCNN+V")
 bootstrap(gold_test, np.array(predictions["cnnv"]))
-predfile = open('predictions/cnnv.pkl', 'wb')
+predfile = open('cnngru/predictions/cnnv.pkl', 'wb')
 pkl.dump(predictions["cnnv"], predfile)
 predfile.close()
 print("\nCNN+W")
 bootstrap(gold_test, np.array(predictions["cnnw"]))
-predfile = open('predictions/cnnw.pkl', 'wb')
+predfile = open('cnngru/predictions/cnnw.pkl', 'wb')
 pkl.dump(predictions["cnnw"], predfile)
 predfile.close()
 print("\nGRU+V")
 bootstrap(gold_test, np.array(predictions["gruv"]))
-predfile = open('predictions/gruv.pkl', 'wb')
+predfile = open('cnngru/predictions/gruv.pkl', 'wb')
 pkl.dump(predictions["gruv"], predfile)
 predfile.close()
 print("\nGRU+W")
 bootstrap(gold_test, np.array(predictions["gruw"]))
-predfile = open('predictions/gruw.pkl', 'wb')
+predfile = open('cnngru/predictions/gruw.pkl', 'wb')
 pkl.dump(predictions["gruw"], predfile)
 predfile.close()
