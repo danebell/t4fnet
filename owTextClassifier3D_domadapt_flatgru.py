@@ -591,13 +591,14 @@ class GRU(nn.Module):
     def __init__(self, input_dim, hidden_size, feats=0):
         super(GRU, self).__init__()
         self.hidden_size = hidden_size
-        self.gru = nn.GRU(input_dim, hidden_size)
+        self.gru = nn.GRU(input_dim, hidden_size, dropout=0.2)
         self.linear = nn.Linear(hidden_size, 1)
         self.dropout = nn.Dropout(p=0.5)
         self.sigmoid = nn.Sigmoid()
         
     def forward(self, input_seq, test_mode=False):
         out, _ = self.gru(input_seq)
+        out = torch.transpose(out,0,1)
         out = out.contiguous().view(out.size()[0] * out.size()[1], -1)
         if not test_mode:
             out = self.dropout(out)
@@ -851,12 +852,12 @@ embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
 nb_filter = 64 # how many convolutional filters
 filter_length = 5 # how many tokens a convolution covers
 pool_length = 4 # how many cells of convolution to pool across when maxing
-nb_epoch = 1 # how many training epochs
+nb_epoch = 2 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
-batch_size_gru=32
+batch_size_gru=1
 predict_batch_size_gru=64
-p
+
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
 predictions["gruv"] = list()
