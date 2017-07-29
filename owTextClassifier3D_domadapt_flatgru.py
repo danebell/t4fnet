@@ -6,7 +6,7 @@
 # NN models to classify Twitter account users as Overweight or Not Overweight.
 # 
 #
-CUDA_MODE = True
+CUDA_MODE = False
 SEED = 947
 
 import argparse
@@ -591,7 +591,7 @@ class GRU(nn.Module):
     def __init__(self, input_dim, hidden_size, feats=0):
         super(GRU, self).__init__()
         self.hidden_size = hidden_size
-        self.gru = nn.GRU(input_dim, hidden_size, dropout=0.2)
+        self.gru = nn.GRU(input_dim * (1 + 2 * num_feats), hidden_size, dropout=0.2)
         self.linear = nn.Linear(hidden_size, 1)
         self.dropout = nn.Dropout(p=0.5)
         self.sigmoid = nn.Sigmoid()
@@ -626,7 +626,8 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
     if net.__class__.__name__ == "GRU":
         pred = np.empty((0, 1))
     else:
-        pred = np.empty((0, 128))
+        num_feats = int(np.sum(np.array(domain)==True))
+        pred = np.empty((0, 128 * (1 + 2 * num_feats)))
     batches = math.ceil(x.size()[0] / batch_size)
     for b in range(batches):
         bx = x[b*batch_size:b*batch_size+batch_size]
@@ -647,9 +648,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
                 fb = torch.LongTensor(torch.np.where(bf[:,2]==0)[0])
             if CUDA_MODE:
                 fb = fb.cuda()
-                f_pred = Variable(torch.LongTensor().cuda())
+                f_pred = Variable(torch.LongTensor().cuda(), volatile=True)
             else:
-                f_pred = Variable(torch.LongTensor())
+                f_pred = Variable(torch.LongTensor(), volatile=True)
             if fb.dim() > 0:
                 bxf = bx[fb]
                 bxf = torch.transpose(bxf, 0, 1)
@@ -665,9 +666,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
                 mb = torch.LongTensor(torch.np.where(bf[:,2]==1)[0])
             if CUDA_MODE:
                 mb = mb.cuda()
-                m_pred = Variable(torch.LongTensor().cuda())
+                m_pred = Variable(torch.LongTensor().cuda(), volatile=True)
             else:
-                m_pred = Variable(torch.LongTensor())
+                m_pred = Variable(torch.LongTensor(), volatile=True)
             if mb.dim() > 0:
                 bxm = bx[mb]
                 bxm = torch.transpose(bxm, 0, 1)
@@ -710,9 +711,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             fnb = torch.LongTensor(torch.np.where((bf[:,0]==0) & (bf[:,2]==0))[0])
             if CUDA_MODE:
                 fnb = fnb.cuda()
-                fn_pred = Variable(torch.LongTensor().cuda())
+                fn_pred = Variable(torch.LongTensor().cuda(), volatile=True)
             else:
-                fn_pred = Variable(torch.LongTensor())
+                fn_pred = Variable(torch.LongTensor(), volatile=True)
             if fnb.dim() > 0:
                 bxfn = bx[fnb]
                 bxfn = torch.transpose(bxfn, 0, 1)
@@ -722,9 +723,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             ftb = torch.LongTensor(torch.np.where((bf[:,0]==0) & (bf[:,2]==1))[0])
             if CUDA_MODE:
                 ftb = ftb.cuda()
-                ft_pred = Variable(torch.LongTensor().cuda())
+                ft_pred = Variable(torch.LongTensor().cuda(), volatile=True)
             else:
-                ft_pred = Variable(torch.LongTensor())
+                ft_pred = Variable(torch.LongTensor(), volatile=True)
             if ftb.dim() > 0:
                 bxft = bx[ftb]
                 bxft = torch.transpose(bxft, 0, 1)
@@ -734,9 +735,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             mnb = torch.LongTensor(torch.np.where((bf[:,0]==1) & (bf[:,2]==0))[0])
             if CUDA_MODE:
                 mnb = mnb.cuda()
-                mn_pred = Variable(torch.LongTensor().cuda())
+                mn_pred = Variable(torch.LongTensor().cuda(), volatile=True)
             else:
-                mn_pred = Variable(torch.LongTensor())
+                mn_pred = Variable(torch.LongTensor(), volatile=True)
             if mnb.dim() > 0:
                 bxmn = bx[mnb]
                 bxmn = torch.transpose(bxmn, 0, 1)
@@ -747,9 +748,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             mtb = torch.LongTensor(torch.np.where((bf[:,0]==1) & (bf[:,2]==1))[0])
             if CUDA_MODE:
                 mtb =mtb.cuda()
-                mt_pred = Variable(torch.LongTensor().cuda())
+                mt_pred = Variable(torch.LongTensor().cuda(), volatile=True)
             else:
-                mt_pred = Variable(torch.LongTensor())
+                mt_pred = Variable(torch.LongTensor(), volatile=True)
             if mtb.dim() > 0:
                 bxmt = bx[mtb]
                 bxmt = torch.transpose(bxmt, 0, 1)
@@ -852,10 +853,10 @@ embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
 nb_filter = 64 # how many convolutional filters
 filter_length = 5 # how many tokens a convolution covers
 pool_length = 4 # how many cells of convolution to pool across when maxing
-nb_epoch = 2 # how many training epochs
+nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
-batch_size_gru=1
+batch_size_gru=32
 predict_batch_size_gru=64
 
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
@@ -893,54 +894,28 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         #  GRU+V/GRU+W
         #
         num_feats = int(np.sum(np.array(domain)==True))
-
-        print('Build first model (tweet-level)...')
-        cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
-
-        # Train or load the model
-        print('Loading model weights...')
-        cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
-        if CUDA_MODE:
-            cnn = cnn.cuda()
-
-        print('Getting dev tweet embeddings...')
-        if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda()) # users * tweets x words, reverse order of tweets
-        else:
-            data_x = Variable(torch.from_numpy(X_dev_flat).long()) # users * tweets x words, reverse order of tweets
-        data_f = f_dev_flat
-        del(X_dev_flat, f_dev_flat)
-        X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
-        del (data_x, data_f)
-        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128)) # users * tweets x hidden -> users x tweets x hidden
-        X_dev_mid = np.fliplr(X_dev_mid) # correct order of tweets
-
-        print('Getting test tweet embeddings...')
-        if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda()) # users * tweets x words, reverse order of tweets
-        else:
-            data_x = Variable(torch.from_numpy(X_test_flat).long()) # users * tweets x words, reverse order of tweets
-        data_f = f_test_flat
-        del(X_test_flat, f_test_flat)
-        X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
-        del(data_x, data_f)
-        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128)) # users * tweets x hidden -> users x tweets x hidden
-        X_test_mid = np.fliplr(X_test_mid) # correct order of tweets
-
-        gru = GRU(128, 128, feats=num_feats)
                 
-        if (os.path.isfile(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')):
-            del(cnn)
-            print('Loading model weights...')
-            gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
-            if CUDA_MODE:
-                gru = gru.cuda()
-        else:
+        # if (os.path.isfile(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')):
+        #     print('Loading model weights...')
+        #     gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
+        #     if CUDA_MODE:
+        #         gru = gru.cuda()
+        # else:
+        if not (os.path.isfile(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')):
             #
             # Pre-train tweet-level vectors
             #
+            print('Build first model (tweet-level)...')
+            cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+
+            # Train or load the model
+            print('Loading model weights...')
+            cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
+            if CUDA_MODE:
+                cnn = cnn.cuda()
+
             chunk = 256
-            X_train_mid = np.zeros((train_shp[0], train_shp[1], 128))
+            X_train_mid = np.zeros((train_shp[0], train_shp[1],  128 * (1 + 2 * num_feats)))
             y_train_mid = np.zeros((train_shp[0], train_shp[1], 1))
             for i in range(0, train_shp[0], chunk):
                 last_idx = min(chunk, train_shp[0] - i)
@@ -948,26 +923,27 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 X_train_chunk = X_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
                 f_train_chunk = f_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
                 if CUDA_MODE:
-                    data_x = Variable(torch.from_numpy(X_train_chunk).long().cuda())
+                    data_x = Variable(torch.from_numpy(X_train_chunk).long().cuda(), volatile=True)
                 else:
-                    data_x = Variable(torch.from_numpy(X_train_chunk).long())
+                    data_x = Variable(torch.from_numpy(X_train_chunk).long(), volatile=True)
                 data_f = f_train_chunk
+                del(f_train_chunk)
                 X_train_chunk = predict(cnn, data_x, data_f, predict_batch_size, domain=domain)
                 del(data_x, data_f)
-                X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128))
+                X_train_chunk = X_train_chunk.reshape((last_idx, maxtweets, 128 * (1 + 2 * num_feats)))
                 X_train_chunk = np.fliplr(X_train_chunk)
                 X_train_mid[i:(i + last_idx)] = X_train_chunk
-                del(X_train_chunk, f_train_chunk)
+                del(X_train_chunk)
 
                 y_train_chunk = y_train_flat[i * maxtweets : (i + last_idx) * maxtweets]
                 y_train_chunk = y_train_chunk.reshape((last_idx, maxtweets, 1))
                 y_train_chunk = np.fliplr(y_train_chunk)
                 y_train_mid[i:(i + last_idx)] = y_train_chunk
                 del(y_train_chunk)
-
             del(X_train_flat, f_train_flat)
             del(cnn)
 
+            gru = GRU(128, 128, feats=num_feats)
             if CUDA_MODE:
                 gru = gru.cuda()
                 data_x = Variable(torch.from_numpy(X_train_mid).float().cuda())
@@ -981,16 +957,50 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             train(gru, data_x, data_y, _, nb_epoch, batch_size_gru)
             del(data_x, data_y)
             torch.save(gru.state_dict(), model_dir + 'tweet_classifier_gru_' + iterid + '.pkl')
+            del(gru)
 
-
+        #
         # Prediction for DEV set
+        #
+
+        print('Getting dev tweet embeddings...')
+        print('Build first model (tweet-level)...')
+        cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+
+        # Train or load the model
+        print('Loading CNN model weights...')
+        cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
+
+        if CUDA_MODE:
+            cnn = cnn.cuda()
+
+        if CUDA_MODE:
+            data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda(), volatile=True) # users * tweets x words, reverse order of tweets
+        else:
+            data_x = Variable(torch.from_numpy(X_dev_flat).long(), volatile=True) # users * tweets x words, reverse order of tweets
+        data_f = f_dev_flat
+        del(X_dev_flat, f_dev_flat)
+        X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
+        del (data_x, data_f)
+        del(cnn)
+        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128 * (1 + 2 * num_feats))) # users * tweets x hidden -> users x tweets x hidden
+        X_dev_mid = np.fliplr(X_dev_mid) # correct order of tweets
+
+        print('Loading GRU model weights...')
+        gru = GRU(128, 128, feats=num_feats)
+        gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
+        if CUDA_MODE:
+            gru = gru.cuda()
+
         print('Dev...')
         if CUDA_MODE:
             data_x = Variable(torch.FloatTensor(X_dev_mid).cuda())
         else:
             data_x = Variable(torch.FloatTensor(X_dev_mid))
+        del(X_dev_mid)
         predDev = predict(gru, data_x, _, predict_batch_size_gru)
         del(data_x)
+        del(gru)
         predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
         
         predDevmn = np.mean(predDev, axis=1)
@@ -1005,14 +1015,49 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         del(predDevwm)
         del(predDev, gold_dev)
 
+
+        #
         # Prediction for TEST set
+        #
+
+        print('Getting test tweet embeddings...')
+        print('Build first model (tweet-level)...')
+        cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+
+        # Train or load the model
+        print('Loading CNN model weights...')
+        cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
+        if CUDA_MODE:
+            cnn = cnn.cuda()
+
+        if CUDA_MODE:
+            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda(), volatile=True) # users * tweets x words, reverse order of tweets
+        else:
+            data_x = Variable(torch.from_numpy(X_test_flat).long(), volatile=True) # users * tweets x words, reverse order of tweets
+        data_f = f_test_flat
+        del(X_test_flat, f_test_flat)
+        X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
+        del(data_x, data_f)
+        del(cnn)
+        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128 * (1 + 2 * num_feats))) # users * tweets x hidden -> users x tweets x hidden
+        X_test_mid = np.fliplr(X_test_mid) # correct order of tweets
+
+
         print('Test...')
+        print('Loading GRU model weights...')
+        gru = GRU(128, 128, feats=num_feats)
+        gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
+        if CUDA_MODE:
+            gru = gru.cuda()
+
         if CUDA_MODE:
             data_x = Variable(torch.FloatTensor(X_test_mid).cuda())
         else:
             data_x = Variable(torch.FloatTensor(X_test_mid))
+        del(X_test_mid)
         predTest = predict(gru, data_x, _, predict_batch_size_gru)
         del(data_x)
+        del(gru)
         predTest = predTest.reshape((test_shp[0], test_shp[1]))
     
         print('GRU+V with threshold = ', thldmn)
@@ -1030,8 +1075,9 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         pkl.dump(predTestwm, predfile)
         predfile.close()
         del(predTestwm)
+        del(predTest)
 
-        del(gru)
+
         
 for iterid in iterations:
     print(iterid + ': Loading gru prediction files...')
