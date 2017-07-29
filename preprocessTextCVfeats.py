@@ -50,7 +50,7 @@ def build_dict(path):
                         features[0].add(feats[0])
                         features[1].add(feats[2])
                         if feats[4] != "":
-                            features[2] = feats[4]
+                            features[2].add(feats[4])
                         sentences.append(tweet.strip())
     os.chdir(currdir)
     
@@ -116,11 +116,14 @@ def grab_data(path, dictionary, features):
     for i, (acid, account) in enumerate(sentences):
         acids[i] = acid
         seqs[i] = [None] * len(account)
-        feats[i] = [None] * 3
+        feats[i] = [None] * (2 + len(features[2]))
         for j, (ss, ft) in enumerate(account):
             feats[i][0] = ft[0]
-            feats[i][1] = ft[1]
-            feats[i][2] = ft[2]
+            feats[i][1] = ft[2]
+            feat_list = [0] * len(features[2])
+            if ft[4] > -1:
+                feat_list[ft[4]] = 1
+            feats[i][2:] = feat_list
             seqs[i][j] = []
             words = ss.strip().lower().split()
             for w in words:
@@ -152,5 +155,6 @@ f.close()
 #f = open('data_toy/ow3df.dict.pkl', 'wb')
 f = open('data_toy/ow3df2.dict.pkl', 'wb')
 pkl.dump(dictionary, f, -1)
+pkl.dump(features, f, -1)
 f.close()
 
