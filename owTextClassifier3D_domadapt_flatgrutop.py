@@ -1071,12 +1071,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 y_train_mid[i:(i + last_idx)] = y_train_chunk
                 del(y_train_chunk)
                 
-                f_train_chunk = f_train[i * maxtweets : (i + last_idx) * maxtweets]
-                f_train_mid[i:(i + last_idx)] = f_train_chunk
-                del(f_train_chunk)
-
-
-            del(X_train_flat, y_train_flat, f_train)
+            del(X_train_flat, y_train_flat)
             del(cnn)
 
             gru = GRU(128, 128, feats=num_feats)
@@ -1087,8 +1082,8 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             else:
                 data_x = Variable(torch.from_numpy(X_train_mid).float())        
                 data_y = Variable(torch.from_numpy(y_train_mid).float())
-            data_f = f_train_mid
-            del(X_train_mid, y_train_mid, f_train_mid)
+            data_f = f_train
+            del(X_train_mid, y_train_mid, f_train)
 
             print('Train...')
             train(gru, data_x, data_y, data_f, nb_epoch, batch_size_gru, domain=domain)
