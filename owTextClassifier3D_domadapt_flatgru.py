@@ -44,10 +44,13 @@ parser.add_argument('--gender', action='store_true',
                     help='apply domain adapatation for gender')
 parser.add_argument('--retweet', action='store_true',
                     help='apply domain adapatation for retweet')
+parser.add_argument('--fold', default=None,
+                    help='run for an expecific fold.')
 
 args = parser.parse_args()
 
 base_dir = args.dir
+run_fold = args.fold
 model_dir = base_dir + '/models/'
 pred_dir = base_dir + '/predictions/'
 domain = [False, False]
@@ -859,6 +862,8 @@ predict_batch_size = 612
 batch_size_gru=32
 predict_batch_size_gru=64
 
+if run_fold != None:
+    run_fold = 'fold' + str(run_fold)
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
 predictions["gruv"] = list()
@@ -869,6 +874,8 @@ foldsfile = "folds.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
+    if iterid != run_fold:
+        continue
     iterations.append(iterid)
     print('')
     print('Iteration: %s' % iterid)
@@ -1078,29 +1085,28 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         del(predTest)
 
 
+if run_fold == None:
+    for iterid in iterations:
+        print(iterid + ': Loading gru prediction files...')
+        predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'rb')
+        predTestmn = pkl.load(predfile)
+        predictions["gruv"].extend(predTestmn)
+        predfile.close()
         
-for iterid in iterations:
-    print(iterid + ': Loading gru prediction files...')
-    predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'rb')
-    predTestmn = pkl.load(predfile)
-    predictions["gruv"].extend(predTestmn)
-    predfile.close()
-        
-    predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'rb')
-    predTestwm = pkl.load(predfile)
-    predictions["gruw"].extend(predTestwm)
-    predfile.close()
+        predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'rb')
+        predTestwm = pkl.load(predfile)
+        predictions["gruw"].extend(predTestwm)
+        predfile.close()
 
-    
-gold_test = np.array(gold_test)
-print("\nResults")
-print("\nGRU+V")
-bootstrap(gold_test, np.array(predictions["gruv"]))
-predfile = open(pred_dir + 'gruv.pkl', 'wb')
-pkl.dump(predictions["gruv"], predfile)
-predfile.close()
-print("\nGRU+W")
-bootstrap(gold_test, np.array(predictions["gruw"]))
-predfile = open(pred_dir + 'gruw.pkl', 'wb')
-pkl.dump(predictions["gruw"], predfile)
-predfile.close()
+        gold_test = np.array(gold_test)
+        print("\nResults")
+        print("\nGRU+V")
+        bootstrap(gold_test, np.array(predictions["gruv"]))
+        predfile = open(pred_dir + 'gruv.pkl', 'wb')
+        pkl.dump(predictions["gruv"], predfile)
+        predfile.close()
+        print("\nGRU+W")
+        bootstrap(gold_test, np.array(predictions["gruw"]))
+        predfile = open(pred_dir + 'gruw.pkl', 'wb')
+        pkl.dump(predictions["gruw"], predfile)
+        predfile.close()

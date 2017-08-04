@@ -6,7 +6,7 @@
 # NN models to classify Twitter account users as Overweight or Not Overweight.
 # 
 #
-CUDA_MODE = True
+CUDA_MODE = False
 SEED = 947
 
 import argparse
@@ -33,10 +33,13 @@ parser.add_argument('--gender', action='store_true',
                     help='apply domain adapatation for gender')
 parser.add_argument('--retweet', action='store_true',
                     help='apply domain adapatation for retweet')
+parser.add_argument('--fold', default=None,
+                    help='run for an expecific fold.')
 
 args = parser.parse_args()
 
 base_dir = args.dir
+run_fold = args.fold
 model_dir = base_dir + '/models/'
 pred_dir = base_dir + '/predictions/'
 domain = [False, False]
@@ -925,7 +928,7 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
         sys.stdout.flush()
 
 
-max_features = 20000
+max_features = 50000
 maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 emb_dim = 200
@@ -938,6 +941,8 @@ batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
 
 
+if run_fold != None:
+    run_fold = 'fold' + str(run_fold)
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
 predictions["cnnv"] = list()
@@ -950,6 +955,8 @@ foldsfile = "folds.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
+    if iterid != run_fold:
+        continue
     iterations.append(iterid)
     print('')
     print('Iteration: %s' % iterid)
@@ -1059,28 +1066,28 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         del(predTestwm)
 
 
-for iterid in iterations:
-    print(iterid + ': Loading cnn prediction files...')
-    predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'rb')
-    predTestmn = pkl.load(predfile)
-    predictions["cnnv"].extend(predTestmn)
-    predfile.close()
+if run_fold == None:  
+    for iterid in iterations:
+        print(iterid + ': Loading cnn prediction files...')
+        predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'rb')
+        predTestmn = pkl.load(predfile)
+        predictions["cnnv"].extend(predTestmn)
+        predfile.close()
         
-    predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'rb')
-    predTestwm = pkl.load(predfile)
-    predictions["cnnw"].extend(predTestwm)
-    predfile.close()
+        predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'rb')
+        predTestwm = pkl.load(predfile)
+        predictions["cnnw"].extend(predTestwm)
+        predfile.close()
 
-    
-gold_test = np.array(gold_test)
-print("\nResults")
-print("\nCNN+V")
-bootstrap(gold_test, np.array(predictions["cnnv"]))
-predfile = open(pred_dir + 'cnnv.pkl', 'wb')
-pkl.dump(predictions["cnnv"], predfile)
-predfile.close()
-print("\nCNN+W")
-bootstrap(gold_test, np.array(predictions["cnnw"]))
-predfile = open(pred_dir + 'cnnw.pkl', 'wb')
-pkl.dump(predictions["cnnw"], predfile)
-predfile.close()
+    gold_test = np.array(gold_test)
+    print("\nResults")
+    print("\nCNN+V")
+    bootstrap(gold_test, np.array(predictions["cnnv"]))
+    predfile = open(pred_dir + 'cnnv.pkl', 'wb')
+    pkl.dump(predictions["cnnv"], predfile)
+    predfile.close()
+    print("\nCNN+W")
+    bootstrap(gold_test, np.array(predictions["cnnw"]))
+    predfile = open(pred_dir + 'cnnw.pkl', 'wb')
+    pkl.dump(predictions["cnnw"], predfile)
+    predfile.close()
