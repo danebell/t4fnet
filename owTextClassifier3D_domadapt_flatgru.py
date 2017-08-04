@@ -862,7 +862,7 @@ predict_batch_size = 612
 batch_size_gru=32
 predict_batch_size_gru=64
 
-if run_fold != None:
+if run_fold is not None:
     run_fold = 'fold' + str(run_fold)
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
@@ -874,7 +874,7 @@ foldsfile = "folds.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
-    if iterid != run_fold:
+    if run_fold is not None and iterid != run_fold:
         continue
     iterations.append(iterid)
     print('')
@@ -1085,7 +1085,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         del(predTest)
 
 
-if run_fold == None:
+if run_fold is None:
     for iterid in iterations:
         print(iterid + ': Loading gru prediction files...')
         predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'rb')

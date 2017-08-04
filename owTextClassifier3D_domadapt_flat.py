@@ -941,7 +941,7 @@ batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
 
 
-if run_fold != None:
+if run_fold is not None:
     run_fold = 'fold' + str(run_fold)
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
@@ -955,7 +955,7 @@ foldsfile = "folds.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
-    if iterid != run_fold:
+    if run_fold is not None and iterid != run_fold:
         continue
     iterations.append(iterid)
     print('')
@@ -1066,7 +1066,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         del(predTestwm)
 
 
-if run_fold == None:  
+if run_fold is None:  
     for iterid in iterations:
         print(iterid + ': Loading cnn prediction files...')
         predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'rb')
