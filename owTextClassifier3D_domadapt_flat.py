@@ -35,16 +35,24 @@ parser.add_argument('--retweet', action='store_true',
                     help='apply domain adapatation for retweet')
 parser.add_argument('--fold', default=None,
                     help='run for an expecific fold.')
+parser.add_argument('--max_words', default=20000,
+                    help='number of words in the embeddings matrix.')
+parser.add_argument('--freeze', action='store_true',
+                    help='freezes embeddings')
 
 args = parser.parse_args()
 
+max_features = int(args.max_words)
 base_dir = args.dir
 run_fold = args.fold
+if run_fold is not None:
+    run_fold = run_fold.split(',')
 model_dir = base_dir + '/models/'
 pred_dir = base_dir + '/predictions/'
 domain = [False, False]
 domain[0] = args.gender
 domain[1] = args.retweet
+freeze = args.freeze
 
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
@@ -769,7 +777,8 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
     
 def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(net.parameters())
+    parameters = filter(lambda p: p.requires_grad, net.parameters())                                                                                                    
+    optimizer = optim.Adam(parameters)
     batches = math.ceil(x.size()[0] / batch_size)
     for e in range(nepochs):
         running_loss = 0.0
@@ -927,8 +936,9 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
         sys.stdout.write('\n')
         sys.stdout.flush()
 
-
-max_features = 50000
+#max_features = 20000
+#max_features = 50000
+#max_features = 100000
 maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 emb_dim = 200
@@ -942,7 +952,7 @@ predict_batch_size = 612
 
 
 if run_fold is not None:
-    run_fold = 'fold' + str(run_fold)
+    run_fold = ['fold' + str(rf) for rf in run_fold]
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
 predictions["cnnv"] = list()
@@ -955,7 +965,7 @@ foldsfile = "folds.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
-    if run_fold is not None and iterid != run_fold:
+    if run_fold is not None and iterid not in run_fold:
         continue
     iterations.append(iterid)
     print('')
@@ -984,6 +994,8 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         print('Build first model (tweet-level)...')
         num_feats = int(np.sum(np.array(domain)==True))
         net = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+        if freeze:
+            net.embs.weight.requires_grad = False
 
         # Train or load the model
         if (os.path.isfile(model_dir + 'tweet_classifier_' + iterid + '.pkl')):

@@ -46,11 +46,16 @@ parser.add_argument('--retweet', action='store_true',
                     help='apply domain adapatation for retweet')
 parser.add_argument('--fold', default=None,
                     help='run for an expecific fold.')
+parser.add_argument('--max_words', default=20000,
+                    help='run for an expecific fold.')
 
 args = parser.parse_args()
 
+max_features = int(args.max_words)
 base_dir = args.dir
 run_fold = args.fold
+if run_fold is not None:
+    run_fold = run_fold.split(',')
 model_dir = base_dir + '/models/'
 pred_dir = base_dir + '/predictions/'
 domain = [False, False]
@@ -848,7 +853,9 @@ def train(net, x, y, f, nepochs, batch_size):
         sys.stdout.flush()
 
 
-max_features = 20000
+#max_features = 20000
+#max_features = 50000
+#max_features = 100000
 maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 emb_dim = 200
@@ -863,7 +870,7 @@ batch_size_gru=32
 predict_batch_size_gru=64
 
 if run_fold is not None:
-    run_fold = 'fold' + str(run_fold)
+    run_fold = ['fold' + str(rf) for rf in run_fold]
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
 predictions["gruv"] = list()
@@ -874,7 +881,7 @@ foldsfile = "folds.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
-    if run_fold is not None and iterid != run_fold:
+    if run_fold is not None and iterid not in run_fold:
         continue
     iterations.append(iterid)
     print('')
@@ -1098,15 +1105,15 @@ if run_fold is None:
         predictions["gruw"].extend(predTestwm)
         predfile.close()
 
-        gold_test = np.array(gold_test)
-        print("\nResults")
-        print("\nGRU+V")
-        bootstrap(gold_test, np.array(predictions["gruv"]))
-        predfile = open(pred_dir + 'gruv.pkl', 'wb')
-        pkl.dump(predictions["gruv"], predfile)
-        predfile.close()
-        print("\nGRU+W")
-        bootstrap(gold_test, np.array(predictions["gruw"]))
-        predfile = open(pred_dir + 'gruw.pkl', 'wb')
-        pkl.dump(predictions["gruw"], predfile)
-        predfile.close()
+    gold_test = np.array(gold_test)
+    print("\nResults")
+    print("\nGRU+V")
+    bootstrap(gold_test, np.array(predictions["gruv"]))
+    predfile = open(pred_dir + 'gruv.pkl', 'wb')
+    pkl.dump(predictions["gruv"], predfile)
+    predfile.close()
+    print("\nGRU+W")
+    bootstrap(gold_test, np.array(predictions["gruw"]))
+    predfile = open(pred_dir + 'gruw.pkl', 'wb')
+    pkl.dump(predictions["gruw"], predfile)
+    predfile.close()

@@ -6,7 +6,7 @@
 # NN models to classify Twitter account users as Overweight or Not Overweight.
 # 
 #
-CUDA_MODE = True
+CUDA_MODE = False
 SEED = 947
 
 import argparse
@@ -638,6 +638,7 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
     batches = math.ceil(x.size()[0] / batch_size)
     for b in range(batches):
         bx = x[b*batch_size:b*batch_size+batch_size]
+        batch_shape = bx.size()
 
         # No domain
         if domain[0] == domain[1] == False:
@@ -708,9 +709,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             else:
                 cb = torch.LongTensor(torch.np.argsort(cb.numpy()))    
     
-            b_pred = b_pred.view(x.size()[0], x.size()[1] , -1)
+            b_pred = b_pred.view(batch_shape[0], batch_shape[1], 1)
             b_pred = b_pred[cb]
-            b_pred = b_pred.view(x.size()[0] * x.size()[1] , -1)
+            b_pred = b_pred.view(batch_shape[0] * batch_shape[1], 1)
             del(cb)
             
         # Two domains
@@ -801,7 +802,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             else:
                 cb = torch.LongTensor(torch.np.argsort(cb.numpy()))    
     
+            b_pred = b_pred.view(batch_shape[0], batch_shape[1], 1)
             b_pred = b_pred[cb]
+            b_pred = b_pred.view(batch_shape[0] * batch_shape[1], 1)
             del(cb)
             
         sys.stdout.write('\r[batch: %3d/%3d]' % (b + 1, batches))
@@ -839,48 +842,99 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
             # Only one domain
             elif domain[0] == False or domain[1] == False:
                 bf = f[b*batch_size:b*batch_size+batch_size]
-
+                
                 if domain[1] == False:
                     fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
                 else:
-                    fb = torch.LongTensor(torch.np.where(bf[:,2]==0)[0])                    
+                    fb = torch.LongTensor(torch.np.where(bf[:,2]==0)[0])
                 if CUDA_MODE:
                     fb = fb.cuda()
-                bxf = bx[fb]
-                byf = by[fb]
-                del(fb)
-                bxf = torch.transpose(bxf, 0, 1)
-    
+                if fb.dim() > 0:
+                    bxf = bx[fb]
+                    byf = by[fb]
+                    bxf = torch.transpose(bxf, 0, 1)
+                    yf_pred = net(bxf, domain=[0,None])
+                    del(bxf)
+
+
                 if domain[1] == False:
                     mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
                 else:
                     mb = torch.LongTensor(torch.np.where(bf[:,2]==1)[0])
-                    
                 if CUDA_MODE:
                     mb = mb.cuda()
-                bxm = bx[mb]
-                bym = by[mb]
-                del(mb)
-                bxm = torch.transpose(bxm, 0, 1)
-                                
-                del(bx, bf)
-
-                # Forward pass
-                if domain[1] == False:
-                    yf_pred = net(bxf, domain=[0,None])
-                    del(bxf)
+                if mb.dim() > 0:
+                    bxm = bx[mb]
+                    bym = by[mb]
+                    bxm = torch.transpose(bxm, 0, 1)
                     ym_pred = net(bxm, domain=[1,None])
                     del(bxm)
-                else:
-                    yf_pred = net(bxf, domain=[None,0])
-                    del(bxf)
-                    ym_pred = net(bxm, domain=[None,1])
-                    del(bxm)
+
+                del(bx, bf)
+                
+                by_list = list()
+                ypred_list = list()
+                if fb.dim() > 0:
+                    by_list.append(byf)
+                    del(byf)
+                    ypred_list.append(yf_pred)
+                    del(yf_pred)
+                    del(fb)
+                if mb.dim() > 0:
+                    by_list.append(bym)
+                    del(bym)
+                    ypred_list.append(ym_pred)
+                    del(ym_pred)
+                    del(mb)
+
+
+                by = torch.cat(by_list)                
+                del(by_list)
+                y_pred = torch.cat(ypred_list)
+                del(ypred_list)
+
+
+                # if domain[1] == False:
+                #     fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
+                # else:
+                #     fb = torch.LongTensor(torch.np.where(bf[:,2]==0)[0])                    
+                # if CUDA_MODE:
+                #     fb = fb.cuda()
+                # bxf = bx[fb]
+                # byf = by[fb]
+                # del(fb)
+                # bxf = torch.transpose(bxf, 0, 1)
+    
+                # if domain[1] == False:
+                #     mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
+                # else:
+                #     mb = torch.LongTensor(torch.np.where(bf[:,2]==1)[0])
                     
-                by = torch.cat((byf, bym))
-                del(byf, bym)
-                y_pred = torch.cat((yf_pred, ym_pred))
-                del(yf_pred, ym_pred)
+                # if CUDA_MODE:
+                #     mb = mb.cuda()
+                # bxm = bx[mb]
+                # bym = by[mb]
+                # del(mb)
+                # bxm = torch.transpose(bxm, 0, 1)
+                                
+                # del(bx, bf)
+
+                # # Forward pass
+                # if domain[1] == False:
+                #     yf_pred = net(bxf, domain=[0,None])
+                #     del(bxf)
+                #     ym_pred = net(bxm, domain=[1,None])
+                #     del(bxm)
+                # else:
+                #     yf_pred = net(bxf, domain=[None,0])
+                #     del(bxf)
+                #     ym_pred = net(bxm, domain=[None,1])
+                #     del(bxm)
+                    
+                # by = torch.cat((byf, bym))
+                # del(byf, bym)
+                # y_pred = torch.cat((yf_pred, ym_pred))
+                # del(yf_pred, ym_pred)
 
             # Two domains                
             else:
