@@ -10,6 +10,7 @@ CUDA_MODE = False
 SEED = 947
 
 import argparse
+import configparser
 import gzip
 import numpy as np
 np.random.seed(SEED) # for reproducibility
@@ -39,9 +40,10 @@ parser.add_argument('--max_words', default=20000,
                     help='number of words in the embeddings matrix.')
 parser.add_argument('--freeze', action='store_true',
                     help='freezes embeddings')
+parser.add_argument('--setting', default=None,
+                    help='hyperparameter setting file.')
 
 args = parser.parse_args()
-
 max_features = int(args.max_words)
 base_dir = args.dir
 run_fold = args.fold
@@ -942,13 +944,29 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
 maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 emb_dim = 200
-embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
+hidden_dim = 128
 nb_filter = 64 # how many convolutional filters
 filter_length = 5 # how many tokens a convolution covers
 pool_length = 4 # how many cells of convolution to pool across when maxing
 nb_epoch = 1 # how many training epochs
 batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
+
+if args.setting is not None:
+    config = configparser.ConfigParser()
+    config.read(args.setting)
+    maxtweets = config['SETTING']['maxtweets']
+    maxlen = config['SETTING']['maxlen']
+    emb_dim = config['SETTING']['emb_dim']
+    hidden_dim = config['SETTING']['hidden_dim']
+    nb_filter = config['SETTING']['nb_filter']
+    filter_length = config['SETTING']['filter_length']
+    pool_length = config['SETTING']['pool_length']
+    nb_epoch = config['SETTING']['nb_epoch']
+    batch_size = config['SETTING']['batch_size']
+    predict_batch_size = config['SETTING']['predict_batch_size']
+
+embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
 
 
 if run_fold is not None:
@@ -993,7 +1011,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     
         print('Build first model (tweet-level)...')
         num_feats = int(np.sum(np.array(domain)==True))
-        net = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+        net = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, hidden_dim, feats=num_feats)
         if freeze:
             net.embs.weight.requires_grad = False
 
