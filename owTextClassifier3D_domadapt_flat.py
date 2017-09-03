@@ -955,16 +955,16 @@ predict_batch_size = 612
 if args.setting is not None:
     config = configparser.ConfigParser()
     config.read(args.setting)
-    maxtweets = config['SETTING']['maxtweets']
-    maxlen = config['SETTING']['maxlen']
-    emb_dim = config['SETTING']['emb_dim']
-    hidden_dim = config['SETTING']['hidden_dim']
-    nb_filter = config['SETTING']['nb_filter']
-    filter_length = config['SETTING']['filter_length']
-    pool_length = config['SETTING']['pool_length']
-    nb_epoch = config['SETTING']['nb_epoch']
-    batch_size = config['SETTING']['batch_size']
-    predict_batch_size = config['SETTING']['predict_batch_size']
+    maxtweets = int(config['SETTING']['maxtweets'])
+    maxlen = int(config['SETTING']['maxlen'])
+    emb_dim = int(config['SETTING']['emb_dim'])
+    hidden_dim = int(config['SETTING']['hidden_dim'])
+    nb_filter = int(config['SETTING']['nb_filter'])
+    filter_length = int(config['SETTING']['filter_length'])
+    pool_length = int(config['SETTING']['pool_length'])
+    nb_epoch = int(config['SETTING']['nb_epoch'])
+    batch_size = int(config['SETTING']['batch_size'])
+    predict_batch_size = int(config['SETTING']['predict_batch_size'])
 
 embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
 
