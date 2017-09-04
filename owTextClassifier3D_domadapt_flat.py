@@ -42,6 +42,8 @@ parser.add_argument('--freeze', action='store_true',
                     help='freezes embeddings')
 parser.add_argument('--setting', default=None,
                     help='hyperparameter setting file.')
+parser.add_argument('--dev', action='store_true',
+                    help='test on development set')
 
 args = parser.parse_args()
 max_features = int(args.max_words)
@@ -55,6 +57,7 @@ domain = [False, False]
 domain[0] = args.gender
 domain[1] = args.retweet
 freeze = args.freeze
+dev_mode = args.dev
 
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
@@ -1001,7 +1004,10 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
  
      
     gold_dev = y_dev.flatten()
-    gold_test.extend(y_test.flatten())
+    if dev_mode:
+        gold_test.extend(y_dev.flatten())
+    else:
+        gold_test.extend(y_test.flatten())
 
     if not (os.path.isfile(pred_dir + 'cnnv_' + iterid + '.pkl') and 
         os.path.isfile(pred_dir + 'cnnw_' + iterid + '.pkl')):
@@ -1057,43 +1063,57 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         predDevmn = np.mean(predDev, axis=1)
         print('Search CNN+V threshold')
         thldmn = get_threshold(gold_dev, predDevmn)
-        del(predDevmn)
         
         wts = np.linspace(1., 0.01, 2000)
         predDevwm = np.average(predDev, axis=1, weights=wts)
         print('Search CNN+W threshold')
         thldwm = get_threshold(gold_dev, predDevwm)
-        del(predDevwm)
-        del(predDev, gold_dev)
-        
-        #Prediction for TEST set
-        print('Test...')
-        if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
-        else:
-            data_x = Variable(torch.from_numpy(X_test_flat).long())
-        data_f = f_test_flat
-        predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain)
-        del(data_x, data_f)
-        predTest = predTest.reshape((test_shp[0], test_shp[1]))
-    
-        print('CNN+V with threshold = ', thldmn)
-        predTestmn = np.mean(predTest, axis=1)
-        predTestmn = (predTestmn >= thldmn).astype(int)
-        predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'wb')
-        pkl.dump(predTestmn, predfile)
-        predfile.close()
-        del(predTestmn)
 
-        
-        print('CNN+W with threshold = ', thldwm)
-        wts = np.linspace(0.01, 1., 2000)
-        predTestwm = np.average(predTest, axis=1, weights=wts)
-        predTestwm = (predTestwm >= thldwm).astype(int)
-        predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'wb')
-        pkl.dump(predTestwm, predfile)
-        predfile.close()
-        del(predTestwm)
+        if dev_mode:
+            predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'wb')
+            pkl.dump(predDevmn, predfile)
+            predfile.close()
+            del(predDevmn)
+
+            predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'wb')
+            pkl.dump(predDevwm, predfile)
+            predfile.close()
+            del(predDevwm)
+            del(predDev, gold_dev)
+            
+        else:
+            #Prediction for TEST set
+            del(predDevmn)
+            del(predDevwm)
+            del(predDev, gold_dev)
+
+            print('Test...')
+            if CUDA_MODE:
+                data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
+            else:
+                data_x = Variable(torch.from_numpy(X_test_flat).long())
+            data_f = f_test_flat
+            predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain)
+            del(data_x, data_f)
+            predTest = predTest.reshape((test_shp[0], test_shp[1]))
+
+            print('CNN+V with threshold = ', thldmn)
+            predTestmn = np.mean(predTest, axis=1)
+            predTestmn = (predTestmn >= thldmn).astype(int)
+            predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'wb')
+            pkl.dump(predTestmn, predfile)
+            predfile.close()
+            del(predTestmn)
+
+
+            print('CNN+W with threshold = ', thldwm)
+            wts = np.linspace(0.01, 1., 2000)
+            predTestwm = np.average(predTest, axis=1, weights=wts)
+            predTestwm = (predTestwm >= thldwm).astype(int)
+            predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'wb')
+            pkl.dump(predTestwm, predfile)
+            predfile.close()
+            del(predTestwm)
 
 
 if run_fold is None:  
