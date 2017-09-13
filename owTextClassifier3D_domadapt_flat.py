@@ -44,6 +44,10 @@ parser.add_argument('--setting', default=None,
                     help='hyperparameter setting file.')
 parser.add_argument('--dev', action='store_true',
                     help='test on development set')
+parser.add_argument('--tweetrel', action='store_true',
+                    help='outputs tweet relevances.')
+parser.add_argument('--outliers', action='store_true',
+                    help='use only outlier tweet predictions')
 
 args = parser.parse_args()
 max_features = int(args.max_words)
@@ -52,18 +56,28 @@ run_fold = args.fold
 if run_fold is not None:
     run_fold = run_fold.split(',')
 model_dir = base_dir + '/models/'
-pred_dir = base_dir + '/predictions/'
 domain = [False, False]
 domain[0] = args.gender
 domain[1] = args.retweet
 freeze = args.freeze
+tweetrel = args.tweetrel
 dev_mode = args.dev
+outliers = args.outliers
+
+if dev_mode:
+    pred_dir = base_dir + '/predictions_dev/'
+    if tweetrel:
+        tweetrel_dir = base_dir + '/tweet_relevance_dev/'
+else:
+    pred_dir = base_dir + '/predictions/'
 
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 if not os.path.exists(pred_dir):
     os.makedirs(pred_dir)
-
+if tweetrel:
+    if not os.path.exists(tweetrel_dir):
+        os.makedirs(tweetrel_dir)
 
 torch.manual_seed(SEED)
 if CUDA_MODE:
@@ -1060,21 +1074,50 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         del(data_x, data_f)
         predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
-        predDevmn = np.mean(predDev, axis=1)
-        print('Search CNN+V threshold')
-        thldmn = get_threshold(gold_dev, predDevmn)
-        
         wts = np.linspace(1., 0.01, 2000)
-        predDevwm = np.average(predDev, axis=1, weights=wts)
+        if outliers:
+            min_out = np.mean(predDev) - np.std(predDev)
+            max_out = np.mean(predDev) + np.std(predDev)
+            predDevmn = list()
+            predDevwm = list()
+            for account in predDev:
+                tweets = list()
+                weights = list()
+                for i in range(0,len(account)):
+                    if account[i] > max_out or account[i] < min_out:
+                        tweets.append(account[i])
+                        weights.append(wts[i])
+                if len(tweets) > 0:
+                    predDevmn.append(np.mean(tweets))
+                    predDevwm.append(np.average(tweets, weights=weights))
+                else:
+                    predDevmn.append(0.0)
+                    predDevwm.append(0.0)
+            predDevmn = np.array(predDevmn)
+            predDevwm = np.array(predDevwm)
+        else:
+            predDevmn = np.mean(predDev, axis=1)
+            predDevwm = np.average(predDev, axis=1, weights=wts)
+
+        print('Search CNN+V threshold')
+        thldmn = get_threshold(gold_dev, predDevmn)        
         print('Search CNN+W threshold')
         thldwm = get_threshold(gold_dev, predDevwm)
 
         if dev_mode:
+            if tweetrel:
+                tweetrelfile = open(tweetrel_dir + 'cnnv_' + iterid + '.pkl', 'wb')
+                pkl.dump(predDev, tweetrelfile)
+                pkl.dump(gold_dev, tweetrelfile)
+                tweetrelfile.close()
+
+            predDevmn = (predDevmn >= thldmn).astype(int)
             predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'wb')
             pkl.dump(predDevmn, predfile)
             predfile.close()
             del(predDevmn)
 
+            predDevwm = (predDevwm >= thldwm).astype(int)
             predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'wb')
             pkl.dump(predDevwm, predfile)
             predfile.close()
@@ -1097,18 +1140,36 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             del(data_x, data_f)
             predTest = predTest.reshape((test_shp[0], test_shp[1]))
 
+
+            wts = np.linspace(1., 0.01, 2000)
+            if outliers:
+                min_out = np.mean(predTest) - np.std(predTest)
+                max_out = np.mean(predTest) + np.std(predTest)
+                predTestmn = list()
+                predTestwm = list()
+                for account in predTest:
+                    tweets = list()
+                    weights = list()
+                    for i in range(0,len(account)):
+                        if account[i] > max_out or account[i] < min_out:
+                            tweets.append(account[i])
+                            weights.append(wts[i])
+                    predTestmn.append(np.mean(tweets))
+                    predTestwm.append(np.average(tweets, weights=weights))
+                predTestmn = np.array(predTestmn)
+                predTestwm = np.array(predTestwm)
+            else:
+                predTestmn = np.mean(predTest, axis=1)
+                predTestwm = np.average(predTest, axis=1, weights=wts)
+
             print('CNN+V with threshold = ', thldmn)
-            predTestmn = np.mean(predTest, axis=1)
             predTestmn = (predTestmn >= thldmn).astype(int)
             predfile = open(pred_dir + 'cnnv_' + iterid + '.pkl', 'wb')
             pkl.dump(predTestmn, predfile)
             predfile.close()
             del(predTestmn)
 
-
             print('CNN+W with threshold = ', thldwm)
-            wts = np.linspace(0.01, 1., 2000)
-            predTestwm = np.average(predTest, axis=1, weights=wts)
             predTestwm = (predTestwm >= thldwm).astype(int)
             predfile = open(pred_dir + 'cnnw_' + iterid + '.pkl', 'wb')
             pkl.dump(predTestwm, predfile)
