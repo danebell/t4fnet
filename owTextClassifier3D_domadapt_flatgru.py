@@ -29,13 +29,12 @@ import pynvml as nv
 #        print ("Free memory:", nvinfo.free)
 #        print ("Used memory:", nvinfo.used)
 
-from keras.preprocessing import sequence
-
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch import optim
 
+from keras.preprocessing import sequence
 
 parser = argparse.ArgumentParser(description='t4f-NN with domain adaptation.')
 parser.add_argument('--dir',
@@ -48,6 +47,14 @@ parser.add_argument('--fold', default=None,
                     help='run for an expecific fold.')
 parser.add_argument('--max_words', default=20000,
                     help='run for an expecific fold.')
+parser.add_argument('--dev', action='store_true',
+                    help='test on development set')
+parser.add_argument('--tweetrel', action='store_true',
+                    help='outputs tweet relevances.')
+parser.add_argument('--outliers', action='store_true',
+                    help='use only outlier tweet predictions')
+parser.add_argument('--vary_th', action='store_true',
+                    help='run tests varying the threshold value')
 
 args = parser.parse_args()
 
@@ -57,16 +64,32 @@ run_fold = args.fold
 if run_fold is not None:
     run_fold = run_fold.split(',')
 model_dir = base_dir + '/models/'
-pred_dir = base_dir + '/predictions/'
 domain = [False, False]
 domain[0] = args.gender
 domain[1] = args.retweet
+dev_mode = args.dev
+tweetrel = args.tweetrel
+outliers = args.outliers
+vary_th = args.vary_th
+
+pred_dir = 'predictions'
+if dev_mode:
+    pred_dir = pred_dir + '_dev'
+    if tweetrel:
+        tweetrel_dir = base_dir + '/tweet_relevance_dev/'
+if outliers:
+    pred_dir = pred_dir + '_outliers'
+if vary_th:
+    pred_dir = pred_dir + '_vary_th'
+pred_dir = base_dir + '/' + pred_dir + '/'
 
 if not os.path.exists(model_dir):
     os.makedirs(model_dir)
 if not os.path.exists(pred_dir):
     os.makedirs(pred_dir)
-
+if tweetrel:
+    if not os.path.exists(tweetrel_dir):
+        os.makedirs(tweetrel_dir)
 
 torch.manual_seed(SEED)
 if CUDA_MODE:
@@ -613,22 +636,6 @@ class GRU(nn.Module):
         out = self.sigmoid(self.linear(out))
         return out
         
-#        batch_size = 32
-#    
-#        modelGRU = Sequential()
-#        modelGRU.add(GRU(128,
-#                       dropout_W=0.2,
-#                       dropout_U=0.2,
-#                       input_shape=(X_test_mid.shape[1], X_test_mid.shape[2]),
-#                       return_sequences=True))
-#        modelGRU.add(TimeDistributed(Dense(1, activation='sigmoid')))
-#    
-#        # Compile
-#        modelGRU.compile(loss='binary_crossentropy',
-#                      optimizer='adam',
-#                      metrics=['accuracy'])
-#        modelGRU.summary()
-    
         
 def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
     if net.__class__.__name__ == "GRU":
@@ -671,6 +678,8 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             if domain[1] == False:
                 mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
             else:
+                print(np.shape(bf))
+                print(np.shape(bf[:,2]))
                 mb = torch.LongTensor(torch.np.where(bf[:,2]==1)[0])
             if CUDA_MODE:
                 mb = mb.cuda()
@@ -873,8 +882,12 @@ if run_fold is not None:
     run_fold = ['fold' + str(rf) for rf in run_fold]
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
 predictions = dict()
-predictions["gruv"] = list()
-predictions["gruw"] = list()
+if not vary_th:
+    predictions["gruv"] = list()
+    predictions["gruw"] = list()
+else:
+    predictions["gruv"] = dict()
+    predictions["gruw"] = dict()
 gold_test = list()
 iterations = list()
 foldsfile = "folds.csv"
@@ -898,9 +911,12 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     print('X_test shape:', test_shp)
     print('X_dev shape:', dev_shp)
  
-     
+
     gold_dev = y_dev.flatten()
-    gold_test.extend(y_test.flatten())
+    if dev_mode:
+        gold_test.extend(y_dev.flatten())
+    else:
+        gold_test.extend(y_test.flatten())
 
     if not (os.path.isfile(pred_dir + 'gruv_' + iterid + '.pkl') and 
         os.path.isfile(pred_dir + 'gruw_' + iterid + '.pkl')):
@@ -977,143 +993,286 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         # Prediction for DEV set
         #
 
-        print('Getting dev tweet embeddings...')
-        print('Build first model (tweet-level)...')
-        cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+        if not vary_th:
+            print('Getting dev tweet embeddings...')
+            print('Build first model (tweet-level)...')
+            cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
 
-        # Train or load the model
-        print('Loading CNN model weights...')
-        cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
+            # Train or load the model
+            print('Loading CNN model weights...')
+            cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
 
-        if CUDA_MODE:
-            cnn = cnn.cuda()
+            if CUDA_MODE:
+                cnn = cnn.cuda()
 
-        if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda(), volatile=True) # users * tweets x words, reverse order of tweets
+            if CUDA_MODE:
+                data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda(), volatile=True) # users * tweets x words, reverse order of tweets
+            else:
+                data_x = Variable(torch.from_numpy(X_dev_flat).long(), volatile=True) # users * tweets x words, reverse order of tweets
+            data_f = f_dev_flat
+            del(X_dev_flat, f_dev_flat)
+            X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
+            del (data_x, data_f)
+            del(cnn)
+            X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128 * (1 + 2 * num_feats))) # users * tweets x hidden -> users x tweets x hidden
+            X_dev_mid = np.fliplr(X_dev_mid) # correct order of tweets
+
+            print('Loading GRU model weights...')
+            gru = GRU(128, 128, feats=num_feats)
+            gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
+            if CUDA_MODE:
+                gru = gru.cuda()
+
+            print('Dev...')
+            if CUDA_MODE:
+                data_x = Variable(torch.FloatTensor(X_dev_mid).cuda())
+            else:
+                data_x = Variable(torch.FloatTensor(X_dev_mid))
+            del(X_dev_mid)
+
+            predDev = predict(gru, data_x, _, predict_batch_size_gru)
+            del(data_x)
+            del(gru)
+            predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
+
+            wts = np.linspace(0.01, 1., 2000)
+            if outliers:
+                min_out = np.mean(predDev) - np.std(predDev)
+                max_out = np.mean(predDev) + np.std(predDev)
+                #min_out = np.percentile(predDev, 25)
+                #max_out = np.percentile(predDev, 75)
+                predDevmn = list()
+                predDevwm = list()
+                for account in predDev:
+                    tweets = list()
+                    weights = list()
+                    for i in range(0,len(account)):
+                        if account[i] > max_out or account[i] < min_out:
+                            tweets.append(account[i])
+                            weights.append(wts[i])
+                    if len(tweets) > 0:
+                        predDevmn.append(np.mean(tweets))
+                        predDevwm.append(np.average(tweets, weights=weights))
+                    else:
+                        predDevmn.append(0.0)
+                        predDevwm.append(0.0)
+                predDevmn = np.array(predDevmn)
+                predDevwm = np.array(predDevwm)
+            else:
+                predDevmn = np.mean(predDev, axis=1)
+                predDevwm = np.average(predDev, axis=1, weights=wts)
+
+            print('Search GRU+V threshold')
+            thldmn = get_threshold(gold_dev, predDevmn)
+
+            print('Search GRU+W threshold')
+            thldwm = get_threshold(gold_dev, predDevwm)
+
+        if dev_mode:
+            if tweetrel:
+                tweetrelfile = open(tweetrel_dir + 'gruv_' + iterid + '.pkl', 'wb')
+                pkl.dump(predDev, tweetrelfile)
+                pkl.dump(gold_dev, tweetrelfile)
+                tweetrelfile.close()
+
+            predDevmn = (predDevmn >= thldmn).astype(int)
+            predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'wb')
+            pkl.dump(predDevmn, predfile)
+            predfile.close()
+            del(predDevmn)
+
+            predDevwm = (predDevwm >= thldwm).astype(int)
+            predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'wb')
+            pkl.dump(predDevwm, predfile)
+            predfile.close()
+            del(predDevwm)
+            del(predDev, gold_dev)
+
         else:
-            data_x = Variable(torch.from_numpy(X_dev_flat).long(), volatile=True) # users * tweets x words, reverse order of tweets
-        data_f = f_dev_flat
-        del(X_dev_flat, f_dev_flat)
-        X_dev_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
-        del (data_x, data_f)
-        del(cnn)
-        X_dev_mid = X_dev_mid.reshape((dev_shp[0], dev_shp[1], 128 * (1 + 2 * num_feats))) # users * tweets x hidden -> users x tweets x hidden
-        X_dev_mid = np.fliplr(X_dev_mid) # correct order of tweets
-
-        print('Loading GRU model weights...')
-        gru = GRU(128, 128, feats=num_feats)
-        gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
-        if CUDA_MODE:
-            gru = gru.cuda()
-
-        print('Dev...')
-        if CUDA_MODE:
-            data_x = Variable(torch.FloatTensor(X_dev_mid).cuda())
-        else:
-            data_x = Variable(torch.FloatTensor(X_dev_mid))
-        del(X_dev_mid)
-        predDev = predict(gru, data_x, _, predict_batch_size_gru)
-        del(data_x)
-        del(gru)
-        predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
-        
-        predDevmn = np.mean(predDev, axis=1)
-        print('Search GRU+V threshold')
-        thldmn = get_threshold(gold_dev, predDevmn)
-        del(predDevmn)
-        
-        wts = np.linspace(0.01, 1., 2000)
-        predDevwm = np.average(predDev, axis=1, weights=wts)
-        print('Search GRU+W threshold')
-        thldwm = get_threshold(gold_dev, predDevwm)
-        del(predDevwm)
-        del(predDev, gold_dev)
-
-
         #
         # Prediction for TEST set
         #
+            try:
+                del(predDevmn)
+                del(predDevwm)
+                del(predDev, gold_dev)
+            except NameError:
+                pass
 
-        print('Getting test tweet embeddings...')
-        print('Build first model (tweet-level)...')
-        cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+            print('Getting test tweet embeddings...')
+            print('Build first model (tweet-level)...')
+            cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
 
         # Train or load the model
-        print('Loading CNN model weights...')
-        cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
-        if CUDA_MODE:
-            cnn = cnn.cuda()
+            print('Loading CNN model weights...')
+            cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
+            if CUDA_MODE:
+                cnn = cnn.cuda()
 
-        if CUDA_MODE:
-            data_x = Variable(torch.from_numpy(X_test_flat).long().cuda(), volatile=True) # users * tweets x words, reverse order of tweets
-        else:
-            data_x = Variable(torch.from_numpy(X_test_flat).long(), volatile=True) # users * tweets x words, reverse order of tweets
-        data_f = f_test_flat
-        del(X_test_flat, f_test_flat)
-        X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
-        del(data_x, data_f)
-        del(cnn)
-        X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128 * (1 + 2 * num_feats))) # users * tweets x hidden -> users x tweets x hidden
-        X_test_mid = np.fliplr(X_test_mid) # correct order of tweets
+            if CUDA_MODE:
+                data_x = Variable(torch.from_numpy(X_test_flat).long().cuda(), volatile=True) # users * tweets x words, reverse order of tweets
+            else:
+                data_x = Variable(torch.from_numpy(X_test_flat).long(), volatile=True) # users * tweets x words, reverse order of tweets
+            data_f = f_test_flat
+            del(X_test_flat, f_test_flat)
+            X_test_mid = predict(cnn, data_x, data_f, predict_batch_size, domain=domain) # users * tweets x hidden
+            del(data_x, data_f)
+            del(cnn)
+            X_test_mid = X_test_mid.reshape((test_shp[0], test_shp[1], 128 * (1 + 2 * num_feats))) # users * tweets x hidden -> users x tweets x hidden
+            X_test_mid = np.fliplr(X_test_mid) # correct order of tweets
 
 
-        print('Test...')
-        print('Loading GRU model weights...')
-        gru = GRU(128, 128, feats=num_feats)
-        gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
-        if CUDA_MODE:
-            gru = gru.cuda()
+            print('Test...')
+            print('Loading GRU model weights...')
+            gru = GRU(128, 128, feats=num_feats)
+            gru.load_state_dict(torch.load(model_dir + 'tweet_classifier_gru_' + iterid + '.pkl'))
+            if CUDA_MODE:
+                gru = gru.cuda()
 
-        if CUDA_MODE:
-            data_x = Variable(torch.FloatTensor(X_test_mid).cuda())
-        else:
-            data_x = Variable(torch.FloatTensor(X_test_mid))
-        del(X_test_mid)
-        predTest = predict(gru, data_x, _, predict_batch_size_gru)
-        del(data_x)
-        del(gru)
-        predTest = predTest.reshape((test_shp[0], test_shp[1]))
+            if CUDA_MODE:
+                data_x = Variable(torch.FloatTensor(X_test_mid).cuda())
+            else:
+                data_x = Variable(torch.FloatTensor(X_test_mid))
+            del(X_test_mid)
+            predTest = predict(gru, data_x, _, predict_batch_size_gru)
+            del(data_x)
+            del(gru)
+            predTest = predTest.reshape((test_shp[0], test_shp[1]))
     
-        print('GRU+V with threshold = ', thldmn)
-        predTestmn = np.mean(predTest, axis=1)
-        predTestmn = (predTestmn >= thldmn).astype(int)
-        predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'wb')
-        pkl.dump(predTestmn, predfile)
-        predfile.close()
-        del(predTestmn)
+            wts = np.linspace(0.01, 1., 2000)
+            if outliers:
+                min_out = np.mean(predTest) - np.std(predTest)
+                max_out = np.mean(predTest) + np.std(predTest)
+                #min_out = np.percentile(predTest, 25)
+                #max_out = np.percentile(predTest, 75)
+                predTestmn = list()
+                predTestwm = list()
+                for account in predTest:
+                    tweets = list()
+                    weights = list()
+                    for i in range(0,len(account)):
+                        if account[i] > max_out or account[i] < min_out:
+                            tweets.append(account[i])
+                            weights.append(wts[i])
+                    if len(tweets) > 0:
+                        predTestmn.append(np.mean(tweets))
+                        predTestwm.append(np.average(tweets, weights=weights))
+                    else:
+                        predTestmn.append(0.0)
+                        predTestwm.append(0.0)
+                predTestmn = np.array(predTestmn)
+                predTestwm = np.array(predTestwm)
+            else:
+                predTestmn = np.mean(predTest, axis=1)
+                predTestwm = np.average(predTest, axis=1, weights=wts)
+
+            if not vary_th:
+                print('GRU+V with threshold = ', thldmn)
+                predTestmn = (predTestmn >= thldmn).astype(int)
+                predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'wb')
+                pkl.dump(predTestmn, predfile)
+                predfile.close()
+                del(predTestmn)
     
-        print('GRU+W with threshold = ', thldwm)
-        predTestwm = np.average(predTest, axis=1, weights=wts)
-        predTestwm = (predTestwm >= thldwm).astype(int)
-        predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'wb')
-        pkl.dump(predTestwm, predfile)
-        predfile.close()
-        del(predTestwm)
-        del(predTest)
+                print('GRU+W with threshold = ', thldwm)
+                predTestwm = (predTestwm >= thldwm).astype(int)
+                predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'wb')
+                pkl.dump(predTestwm, predfile)
+                predfile.close()
+                del(predTestwm)
+                del(predTest)
+
+            else:
+                predTestmnthld = list()
+                predTestwmthld = list()
+                start = 0.
+                stop = 1.
+                step = 0.05
+                for thld in np.arange(start, stop, step):
+                    print('GRU+V with threshold = ', thld)
+                    predTestmnthld.append((thld, (predTestmn >= thld).astype(int)))
+
+                    print('GRU+W with threshold = ', thld)
+                    predTestwmthld.append((thld, (predTestwm >= thld).astype(int)))
+                    
+                predTestmn = predTestmnthld
+                predTestwm = predTestwmthld
+
+                predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'wb')
+                pkl.dump(predTestmn, predfile)
+                predfile.close()
+                del(predTestmn)
+
+                predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'wb')
+                pkl.dump(predTestwm, predfile)
+                predfile.close()
+                del(predTestwm)
+
 
 
 if run_fold is None:
-    for iterid in iterations:
-        print(iterid + ': Loading gru prediction files...')
-        predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'rb')
-        predTestmn = pkl.load(predfile)
-        predictions["gruv"].extend(predTestmn)
+    if not vary_th:
+        for iterid in iterations:
+            print(iterid + ': Loading gru prediction files...')
+            predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'rb')
+            predTestmn = pkl.load(predfile)
+            predictions["gruv"].extend(predTestmn)
+            predfile.close()
+
+            predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'rb')
+            predTestwm = pkl.load(predfile)
+            predictions["gruw"].extend(predTestwm)
+            predfile.close()
+
+        gold_test = np.array(gold_test)
+        print("\nResults")
+        print("\nGRU+V")
+        bootstrap(gold_test, np.array(predictions["gruv"]))
+        predfile = open(pred_dir + 'gruv.pkl', 'wb')
+        pkl.dump(predictions["gruv"], predfile)
         predfile.close()
-        
-        predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'rb')
-        predTestwm = pkl.load(predfile)
-        predictions["gruw"].extend(predTestwm)
+        print("\nGRU+W")
+        bootstrap(gold_test, np.array(predictions["gruw"]))
+        predfile = open(pred_dir + 'gruw.pkl', 'wb')
+        pkl.dump(predictions["gruw"], predfile)
         predfile.close()
 
-    gold_test = np.array(gold_test)
-    print("\nResults")
-    print("\nGRU+V")
-    bootstrap(gold_test, np.array(predictions["gruv"]))
-    predfile = open(pred_dir + 'gruv.pkl', 'wb')
-    pkl.dump(predictions["gruv"], predfile)
-    predfile.close()
-    print("\nGRU+W")
-    bootstrap(gold_test, np.array(predictions["gruw"]))
-    predfile = open(pred_dir + 'gruw.pkl', 'wb')
-    pkl.dump(predictions["gruw"], predfile)
-    predfile.close()
+    else:
+        for iterid in iterations:
+            print(iterid + ': Loading gru prediction files...')
+            predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'rb')
+            predTestmn = pkl.load(predfile)
+            for (thld,predTest) in predTestmn:
+                #thld = str(thld)
+                if thld not in predictions["gruv"]:
+                    predictions["gruv"][thld] = list()
+                predictions["gruv"][thld].extend(predTest)
+            predfile.close()
+
+            predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'rb')
+            predTestwm = pkl.load(predfile)
+            for (thld,predTest) in predTestwm:
+                #thld = str(thld)
+                if thld not in predictions["gruw"]:
+                    predictions["gruw"][thld] = list()
+                predictions["gruw"][thld].extend(predTest)
+            predfile.close()
+
+
+        gold_test = np.array(gold_test)
+        print("\nResults")
+        print("\nGRU+V")
+        for thld in sorted(predictions["gruv"]):
+            print("\nThreshold:",thld)
+            bootstrap(gold_test, np.array(predictions["gruv"][thld]))
+        predfile = open(pred_dir + 'gruv.pkl', 'wb')
+        pkl.dump(predictions["gruv"], predfile)
+        predfile.close()
+
+        print("\nGRU+W")
+        for thld in sorted(predictions["gruw"]):
+            print("\nThreshold:",thld)
+            bootstrap(gold_test, np.array(predictions["gruw"][thld]))
+        predfile = open(pred_dir + 'gruw.pkl', 'wb')
+        pkl.dump(predictions["gruw"], predfile)
+        predfile.close()
