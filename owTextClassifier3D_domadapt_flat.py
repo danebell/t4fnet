@@ -154,7 +154,9 @@ def push_indices(x, start, index_from):
     else:
         return x
 
-def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3df.pkl', nb_words=None, skip_top=0,
+def load_data(path='dow3df.pkl', nb_words=None, skip_top=0,
 #def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
@@ -245,7 +247,9 @@ def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    vocab='ow3df.dict.pkl', 
+                    #vocab='ow3df.dict.pkl', 
+                    #vocab='risk3df.dict.pkl',
+                    vocab='dow3df.dict.pkl',  
                     #vocab='data_toy/ow3df.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
@@ -467,7 +471,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevan
         y_dev = list()
         f_dev = list()
         for user in folds[itern]:
-            if user[1] == "Overweight":
+            if user[1] == "Overweight" or user[1] == "risk":
                 position = np.where(i_pos == user[0])[0][0]
                 X_test.append(x_pos[position])
                 y_test.append(y_pos[position])
@@ -481,7 +485,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevan
         if nitern == len(folds):
             nitern = 0
         for user in folds[nitern]:
-            if user[1] == "Overweight":
+            if user[1] == "Overweight" or user[1] == "risk":
                 position = np.where(i_pos == user[0])[0][0]
                 X_dev.append(x_pos[position])
                 y_dev.append(y_pos[position])
@@ -494,7 +498,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevan
         for j in range(0, len(folds)):
             if itern != j and nitern != j:
                 for user in folds[j]:
-                    if user[1] == "Overweight":
+                    if user[1] == "Overweight" or user[1] == "risk":
                         position = np.where(i_pos == user[0])[0][0]
                         X_train.append(x_pos[position])
                         y_train.append(y_pos[position])
@@ -669,9 +673,17 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             bf = f[b*batch_size:b*batch_size+batch_size]
             
             if domain[1] == False:
-                fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
+                idx = torch.np.where(bf[:,0]==0)[0]
+                if np.shape(idx)[0] == 0:
+                    fb = torch.LongTensor()
+                else:
+                    fb = torch.LongTensor(idx)
             else:
-                fb = torch.LongTensor(torch.np.where(bf[:,2]==0)[0])
+                idx = torch.np.where(bf[:,2]==0)[0]
+                if np.shape(idx)[0] == 0:
+                    fb = torch.LongTensor()
+                else:
+                    fb = torch.LongTensor(idx)  
             if CUDA_MODE:
                 fb = fb.cuda()
                 f_pred = Variable(torch.LongTensor().cuda())
@@ -687,9 +699,17 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
                 del(bxf)
 
             if domain[1] == False:
-                mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
+                idx = torch.np.where(bf[:,0]==1)[0]
+                if np.shape(idx)[0] == 0:
+                    mb = torch.LongTensor()
+                else:
+                    mb = torch.LongTensor(idx)
             else:
-                mb = torch.LongTensor(torch.np.where(bf[:,2]==1)[0])
+                idx = torch.np.where(bf[:,2]==1)[0]
+                if np.shape(idx)[0] == 0:
+                    mb = torch.LongTensor()
+                else:
+                    mb = torch.LongTensor(idx)  
             if CUDA_MODE:
                 mb = mb.cuda()
                 m_pred = Variable(torch.LongTensor().cuda())
@@ -866,46 +886,94 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
                 bf = f[b*batch_size:b*batch_size+batch_size]
 
                 if domain[1] == False:
-                    fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
+                    idx = torch.np.where(bf[:,0]==0)[0]
+                    if np.shape(idx)[0] == 0:
+                        fb = torch.LongTensor()
+                    else:
+                        fb = torch.LongTensor(idx)
                 else:
-                    fb = torch.LongTensor(torch.np.where(bf[:,2]==0)[0])                    
+                    idx = torch.np.where(bf[:,2]==0)[0]
+                    if np.shape(idx)[0] == 0:
+                        fb = torch.LongTensor()
+                    else:
+                        fb = torch.LongTensor(idx)                      
                 if CUDA_MODE:
                     fb = fb.cuda()
-                bxf = bx[fb]
-                byf = by[fb]
-                del(fb)
-                bxf = torch.transpose(bxf, 0, 1)
+                
+                if fb.dim() > 0:
+                    bxf = bx[fb]
+                    byf = by[fb]
+                    bxf = torch.transpose(bxf, 0, 1)
     
                 if domain[1] == False:
-                    mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
+                    idx = torch.np.where(bf[:,0]==1)[0]
+                    if np.shape(idx)[0] == 0:
+                        mb = torch.LongTensor()
+                    else:
+                        mb = torch.LongTensor(idx)
                 else:
-                    mb = torch.LongTensor(torch.np.where(bf[:,2]==1)[0])
-                    
+                    idx = torch.np.where(bf[:,2]==1)[0]
+                    if np.shape(idx)[0] == 0:
+                        mb = torch.LongTensor()
+                    else:
+                        mb = torch.LongTensor(idx)             
                 if CUDA_MODE:
                     mb = mb.cuda()
-                bxm = bx[mb]
-                bym = by[mb]
-                del(mb)
-                bxm = torch.transpose(bxm, 0, 1)
+
+                if mb.dim() > 0:
+                    bxm = bx[mb]
+                    bym = by[mb]
+                    bxm = torch.transpose(bxm, 0, 1)
                                 
                 del(bx, bf)
 
+
                 # Forward pass
                 if domain[1] == False:
-                    yf_pred = net(bxf, domain=[0,None])
-                    del(bxf)
-                    ym_pred = net(bxm, domain=[1,None])
-                    del(bxm)
+                    if fb.dim() > 0:
+                        yf_pred = net(bxf, domain=[0,None])
+                        del(bxf)
+                    if mb.dim() > 0:
+                        ym_pred = net(bxm, domain=[1,None])
+                        del(bxm)
                 else:
-                    yf_pred = net(bxf, domain=[None,0])
-                    del(bxf)
-                    ym_pred = net(bxm, domain=[None,1])
-                    del(bxm)
+                    if fb.dim() > 0:
+                        yf_pred = net(bxf, domain=[None,0])
+                        del(bxf)
+                    if mb.dim() > 0:
+                        ym_pred = net(bxm, domain=[None,1])
+                        del(bxm)
                     
-                by = torch.cat((byf, bym))
-                del(byf, bym)
-                y_pred = torch.cat((yf_pred, ym_pred))
-                del(yf_pred, ym_pred)
+                if fb.dim() > 0 and mb.dim() > 0:
+                #    cb = torch.cat((fb, mb))
+                    del(fb, mb)
+                    y_pred = torch.cat((yf_pred, ym_pred))
+                    del(yf_pred, ym_pred)
+                elif fb.dim() > 0:
+                #    cb = fb
+                    del(fb)
+                    y_pred = yf_pred
+                    del(yf_pred)
+                else:
+                #    cb = mb
+                    del (mb)
+                    y_pred = ym_pred
+                    del(ym_pred)
+
+
+                #if CUDA_MODE:
+                #    cb = torch.LongTensor(torch.np.argsort(cb.cpu().numpy())).cuda()
+                #else:
+                #    cb = torch.LongTensor(torch.np.argsort(cb.numpy()))    
+    
+                #y_pred = y_pred[cb]
+                #del(cb)
+
+
+                #by = torch.cat((byf, bym))
+                #del(byf, bym)
+                #y_pred = torch.cat((yf_pred, ym_pred))
+                #del(yf_pred, ym_pred)
 
             # Two domains                
             else:
@@ -1044,7 +1112,9 @@ else:
     predictions["cnnw"] = dict()
 gold_test = list()
 iterations = list()
-foldsfile = "folds.csv"
+#foldsfile = "folds.csv"
+#foldsfile = "foldsrisk.csv"
+foldsfile = "foldsdow.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevant=tweet_filter):
     iterid = iteration[0]

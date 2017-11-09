@@ -10,6 +10,7 @@ CUDA_MODE = False
 SEED = 947
 
 import argparse
+import configparser
 import gzip
 import numpy as np
 np.random.seed(SEED) # for reproducibility
@@ -47,6 +48,8 @@ parser.add_argument('--fold', default=None,
                     help='run for an expecific fold.')
 parser.add_argument('--max_words', default=20000,
                     help='run for an expecific fold.')
+parser.add_argument('--setting', default=None,
+                    help='hyperparameter setting file.')
 parser.add_argument('--dev', action='store_true',
                     help='test on development set')
 parser.add_argument('--tweetrel', action='store_true',
@@ -55,6 +58,9 @@ parser.add_argument('--outliers', action='store_true',
                     help='use only outlier tweet predictions')
 parser.add_argument('--vary_th', action='store_true',
                     help='run tests varying the threshold value')
+parser.add_argument('--fixed_th', action='store_true',
+                    help='run tests vwith fixed threshold value')
+
 
 args = parser.parse_args()
 
@@ -71,6 +77,7 @@ dev_mode = args.dev
 tweetrel = args.tweetrel
 outliers = args.outliers
 vary_th = args.vary_th
+fixed_th = args.fixed_th
 
 pred_dir = 'predictions'
 if dev_mode:
@@ -81,6 +88,8 @@ if outliers:
     pred_dir = pred_dir + '_outliers'
 if vary_th:
     pred_dir = pred_dir + '_vary_th'
+if fixed_th:
+    pred_dir = pred_dir + '_fixed_th'
 pred_dir = base_dir + '/' + pred_dir + '/'
 
 if not os.path.exists(model_dir):
@@ -152,7 +161,8 @@ def push_indices(x, start, index_from):
     else:
         return x
 
-def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
+def load_data(path='risk3df.pkl', nb_words=None, skip_top=0,
 #def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
@@ -243,7 +253,8 @@ def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
-                    vocab='ow3df.dict.pkl', 
+                    #vocab='ow3df.dict.pkl', 
+                    vocab='risk3df.dict.pkl', 
                     #vocab='data_toy/ow3df.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
@@ -453,7 +464,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
         y_dev = list()
         f_dev = list()
         for user in folds[itern]:
-            if user[1] == "Overweight":
+            if user[1] == "Overweight" or user[1] == "risk":
                 position = np.where(i_pos == user[0])[0][0]
                 X_test.append(x_pos[position])
                 y_test.append(y_pos[position])
@@ -467,7 +478,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
         if nitern == len(folds):
             nitern = 0
         for user in folds[nitern]:
-            if user[1] == "Overweight":
+            if user[1] == "Overweight" or user[1] == "risk":
                 position = np.where(i_pos == user[0])[0][0]
                 X_dev.append(x_pos[position])
                 y_dev.append(y_pos[position])
@@ -480,7 +491,7 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
         for j in range(0, len(folds)):
             if itern != j and nitern != j:
                 for user in folds[j]:
-                    if user[1] == "Overweight":
+                    if user[1] == "Overweight" or user[1] == "risk":
                         position = np.where(i_pos == user[0])[0][0]
                         X_train.append(x_pos[position])
                         y_train.append(y_pos[position])
@@ -658,9 +669,17 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             bf = f[b*batch_size:b*batch_size+batch_size]
             
             if domain[1] == False:
-                fb = torch.LongTensor(torch.np.where(bf[:,0]==0)[0])
+                idx = torch.np.where(bf[:,0]==0)[0]
+                if np.shape(idx)[0] == 0:
+                    fb = torch.LongTensor()
+                else:
+                    fb = torch.LongTensor(idx)
             else:
-                fb = torch.LongTensor(torch.np.where(bf[:,2]==0)[0])
+                idx = torch.np.where(bf[:,2]==0)[0]
+                if np.shape(idx)[0] == 0:
+                    fb = torch.LongTensor()
+                else:
+                    fb = torch.LongTensor(idx)
             if CUDA_MODE:
                 fb = fb.cuda()
                 f_pred = Variable(torch.LongTensor().cuda(), volatile=True)
@@ -676,11 +695,17 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
                 del(bxf)
 
             if domain[1] == False:
-                mb = torch.LongTensor(torch.np.where(bf[:,0]==1)[0])
+                idx = torch.np.where(bf[:,0]==1)[0]
+                if np.shape(idx)[0] == 0:
+                    mb = torch.LongTensor()
+                else:
+                    mb = torch.LongTensor(idx)
             else:
-                print(np.shape(bf))
-                print(np.shape(bf[:,2]))
-                mb = torch.LongTensor(torch.np.where(bf[:,2]==1)[0])
+                idx = torch.np.where(bf[:,2]==1)[0]
+                if np.shape(idx)[0] == 0:
+                    mb = torch.LongTensor()
+                else:
+                    mb = torch.LongTensor(idx)
             if CUDA_MODE:
                 mb = mb.cuda()
                 m_pred = Variable(torch.LongTensor().cuda(), volatile=True)
@@ -694,9 +719,9 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
                 else:
                     m_pred = net(bxm, test_mode=True, domain=[None,1])
                 del(bxm)
-    
             del(bf)
                     
+
             if fb.dim() > 0 and mb.dim() > 0:
                 cb = torch.cat((fb, mb))
                 del(fb, mb)
@@ -868,7 +893,6 @@ def train(net, x, y, f, nepochs, batch_size):
 maxtweets = 2000
 maxlen = 50  # cut texts to this number of words (among top max_features most common words)
 emb_dim = 200
-embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
 nb_filter = 64 # how many convolutional filters
 filter_length = 5 # how many tokens a convolution covers
 pool_length = 4 # how many cells of convolution to pool across when maxing
@@ -877,6 +901,23 @@ batch_size = 256 # how many tweets to train at a time
 predict_batch_size = 612
 batch_size_gru=32
 predict_batch_size_gru=64
+
+if args.setting is not None:
+    config = configparser.ConfigParser()
+    config.read(args.setting)
+    maxtweets = int(config['SETTING']['maxtweets'])
+    maxlen = int(config['SETTING']['maxlen'])
+    emb_dim = int(config['SETTING']['emb_dim'])
+    hidden_dim = int(config['SETTING']['hidden_dim'])
+    nb_filter = int(config['SETTING']['nb_filter'])
+    filter_length = int(config['SETTING']['filter_length'])
+    pool_length = int(config['SETTING']['pool_length'])
+    nb_epoch = int(config['SETTING']['nb_epoch'])
+    batch_size = int(config['SETTING']['batch_size'])
+    predict_batch_size = int(config['SETTING']['predict_batch_size'])
+    batch_size_gru = int(config['SETTING']['gru_batch_size'])
+
+embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
 
 if run_fold is not None:
     run_fold = ['fold' + str(rf) for rf in run_fold]
@@ -891,6 +932,7 @@ else:
 gold_test = list()
 iterations = list()
 foldsfile = "folds.csv"
+foldsfile = "foldsrisk.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
@@ -993,7 +1035,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
         # Prediction for DEV set
         #
 
-        if not vary_th:
+        if not vary_th and not fixed_th:
             print('Getting dev tweet embeddings...')
             print('Build first model (tweet-level)...')
             cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
@@ -1166,7 +1208,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 predTestmn = np.mean(predTest, axis=1)
                 predTestwm = np.average(predTest, axis=1, weights=wts)
 
-            if not vary_th:
+            if not vary_th and not fixed_th:
                 print('GRU+V with threshold = ', thldmn)
                 predTestmn = (predTestmn >= thldmn).astype(int)
                 predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'wb')
@@ -1182,12 +1224,12 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 del(predTestwm)
                 del(predTest)
 
-            else:
+            elif vary_th:
                 predTestmnthld = list()
                 predTestwmthld = list()
                 start = 0.
                 stop = 1.
-                step = 0.05
+                step = 0.005
                 for thld in np.arange(start, stop, step):
                     print('GRU+V with threshold = ', thld)
                     predTestmnthld.append((thld, (predTestmn >= thld).astype(int)))
@@ -1208,6 +1250,21 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 predfile.close()
                 del(predTestwm)
 
+            else:
+                print('GRU+V with threshold = ', 0.15)
+                predTestmn = (predTestmn >= 0.15).astype(int)
+                predfile = open(pred_dir + 'gruv_' + iterid + '.pkl', 'wb')
+                pkl.dump(predTestmn, predfile)
+                predfile.close()
+                del(predTestmn)
+    
+                print('GRU+W with threshold = ', 0.15)
+                predTestwm = (predTestwm >= 0.15).astype(int)
+                predfile = open(pred_dir + 'gruw_' + iterid + '.pkl', 'wb')
+                pkl.dump(predTestwm, predfile)
+                predfile.close()
+                del(predTestwm)
+                del(predTest)
 
 
 if run_fold is None:
