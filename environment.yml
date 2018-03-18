@@ -2,7 +2,7 @@ name: t4f
 channels:
 - menpo
 dependencies:
-- python=3.4
+- python
 # - dlib
 - h5py
 # - ipykernel
@@ -33,7 +33,7 @@ dependencies:
 # - pickleshare
 # - pip
 # - ptyprocess
-- pydot-ng
+# - pydot-ng
 # - pygments
 # - pyparsing
 # - pyqt
@@ -64,4 +64,5 @@ dependencies:
 # - zlib
 - pip:
   - keras
+  - keras_vggface
 #   - theano
