@@ -53,6 +53,22 @@ parser.add_argument('--emb_file', default='food_vectors_clean.txt',
                     help='file with word embeddings.')
 parser.add_argument('--vary_th', action='store_true',
                     help='run tests varying the threshold value')
+parser.add_argument('--fixed_th', default=None, type=float,
+                    help='run tests with a fixed threshold value')
+parser.add_argument('--train_percent', default=None, type=float,
+                    help='train with a percentage of the training data.')
+parser.add_argument('--posW', default=0.5, type=float,
+                    help='weight of the positive classes.')
+parser.add_argument('--gru', action='store_true',
+                    help='use GRU instead of CNN.')
+parser.add_argument('--mlp', action='store_true',
+                    help='use MLP instead of CNN.')
+parser.add_argument('--wordorder', action='store_true',
+                    help='use word order.')
+parser.add_argument('--filebase', default='risk3dfdictugwo',
+                    help='base name of the input files.')
+
+
 
 args = parser.parse_args()
 max_features = int(args.max_words)
@@ -71,6 +87,13 @@ outliers = args.outliers
 tweet_filter = args.tweet_filter
 emb_file = args.emb_file
 vary_th = args.vary_th
+fixed_th = args.fixed_th
+train_percent = args.train_percent
+posW = args.posW
+model_gru = args.gru
+model_mlp = args.mlp
+wordorder = args.wordorder
+filebase = args.filebase
 
 pred_dir = 'predictions'
 if dev_mode:
@@ -156,8 +179,17 @@ def push_indices(x, start, index_from):
 
 #def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
 #def load_data(path='risk3df.pkl', nb_words=None, skip_top=0,
-def load_data(path='dow3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdict.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdictu.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdictu10t.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdictuwo.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdictug.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdictugwo.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdictupwo.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdictug10t.pkl', nb_words=None, skip_top=0,
+#def load_data(path='dow3df.pkl', nb_words=None, skip_top=0,
 #def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
+def load_data(path=filebase + '.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
     # Arguments
@@ -183,15 +215,23 @@ def load_data(path='dow3df.pkl', nb_words=None, skip_top=0,
     
     Adapted from keras.datasets.imdb.py by François Chollet
     '''
-    
     if path.endswith(".gz"):
         f = gzip.open(path, 'rb')
     else:
         f = open(path, 'rb')
 
-    (x_pos, i_pos, f_pos, y_pos) = pkl.load(f)
-    (x_neg, i_neg, f_neg, y_neg) = pkl.load(f)
-    
+    pos = pkl.load(f)
+    if len(pos) == 5:
+        (x_pos, i_pos, f_pos, y_pos, o_pos) = pos
+    else:
+        (x_pos, i_pos, f_pos, y_pos) = pos
+        o_pos = []
+    neg = pkl.load(f)
+    if len(neg) == 5:
+        (x_neg, i_neg, f_neg, y_neg, o_neg) = neg
+    else:
+        (x_neg, i_neg, f_neg, y_neg) = neg
+        o_neg = []
     f.close()
 
     # randomize datum order
@@ -203,6 +243,8 @@ def load_data(path='dow3df.pkl', nb_words=None, skip_top=0,
     np.random.shuffle(i_pos)
     np.random.seed(seed)
     np.random.shuffle(f_pos)
+    np.random.seed(seed)
+    np.random.shuffle(o_pos)
 
     np.random.seed(seed * 2)
     np.random.shuffle(x_neg)
@@ -212,8 +254,10 @@ def load_data(path='dow3df.pkl', nb_words=None, skip_top=0,
     np.random.shuffle(i_neg)
     np.random.seed(seed * 2)
     np.random.shuffle(f_neg)
+    np.random.seed(seed * 2)
+    np.random.shuffle(o_neg)
 
-    
+
     # keep maxlen words of each tweet
     if maxlen is not None:
         x_pos = cap_length(x_pos, maxlen)
@@ -232,25 +276,55 @@ def load_data(path='dow3df.pkl', nb_words=None, skip_top=0,
     # prepend each sequence with start and raise indices by index_from
     x_pos = push_indices(x_pos, start, index_from)
     x_neg = push_indices(x_neg, start, index_from)
-    
+
+    for i in range(len(o_pos)):
+        if o_pos[i] is not None:
+            o = list(o_pos[i])
+            o.reverse()
+            o.append(0.)
+            o.reverse()
+            o_pos[i] = [np.array(o)]
+        else:
+            o_pos[i] = []
+    for i in range(len(o_neg)):
+        if o_neg[i] is not None:
+            o = list(o_neg[i])
+            o.reverse()
+            o.append(0.)
+            o.reverse()
+            o_neg[i] = [np.array(o)]
+        else:
+            o_neg[i] = []
+
     x_pos = np.array(x_pos)
     y_pos = np.array(y_pos)
     i_pos = np.array(i_pos)
     f_pos = np.array(f_pos)
+    o_pos = np.array(o_pos)
 
     x_neg = np.array(x_neg)
     y_neg = np.array(y_neg)
     i_neg = np.array(i_neg)
     f_neg = np.array(f_neg)
-    
-    return (x_pos, y_pos, i_pos, f_pos), (x_neg, y_neg, i_neg, f_neg)
+    o_neg = np.array(o_neg)
+   
+    return (x_pos, y_pos, i_pos, f_pos, o_pos), (x_neg, y_neg, i_neg, f_neg, o_neg)
 
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
                     #vocab='ow3df.dict.pkl', 
                     #vocab='risk3df.dict.pkl',
-                    vocab='dow3df.dict.pkl',  
+                    #vocab='risk3dfdict.dict.pkl',
+                    #vocab='risk3dfdictu.dict.pkl',
+                    #vocab='risk3dfdictu10t.dict.pkl',
+                    #vocab='risk3dfdictuwo.dict.pkl',
+                    #vocab='risk3dfdictug.dict.pkl',
+                    #vocab='risk3dfdictugwo.dict.pkl',
+                    #vocab='risk3dfdictupwo.dict.pkl',
+                    #vocab='risk3dfdictug10t.dict.pkl',
+                    #vocab='dow3df.dict.pkl',  
                     #vocab='data_toy/ow3df.dict.pkl', 
+                    vocab=filebase + '.dict.pkl',
                     w2v='food_vectors_clean.txt'):
 
     f = open(vocab, 'rb')
@@ -268,22 +342,26 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
     i = 1
     for line in f:
         values = line.split()
-        word = values[0].decode('UTF-8')
-        if word in word_index:
-            if word_index[word] < max_features:
-                coefs = np.asarray(values[1:], dtype='float32')
-                embeddings_index[word] = coefs
-        if i % 1000 == 0:
-            print(".", end="")
-        if i % 100000 == 0:
-            print("")
-            
-        i = i + 1
+        try:
+            word = values[0].decode('UTF-8')
+            if word in word_index:
+                if word_index[word] < max_features:
+                    coefs = np.asarray(values[1:], dtype='float32')
+                    embeddings_index[word] = coefs
+            if i % 1000 == 0:
+                print(".", end="")
+            if i % 100000 == 0:
+                print("")
+
+            i = i + 1
+        except:
+            pass
 
     f.close()
     print("")
     print('Found %s word vectors.' % len(embeddings_index))
     
+    max_features = min(max_features, len(embeddings_index))
     embedding_matrix = np.zeros((max_features+index_from, emb_dim))
     for word, i in word_index.items():
         if i < max_features:
@@ -292,7 +370,7 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
                 # words not found in embedding index will be all-zeros.
                 embedding_matrix[i+index_from] = embedding_vector
 
-    return embedding_matrix
+    return embedding_matrix, max_features
 
 def load_folds(file, seed=113):
     print ("Loading folds...")
@@ -308,17 +386,27 @@ def load_folds(file, seed=113):
     f.close()
     return folds
 
-def shuffle_in_unison(a, b, c):
-    assert len(a) == len(b) == len(c)
+def shuffle_in_unison(a, b, c, o=None):
+    if o is None:
+        assert len(a) == len(b) == len(c)
+    else:
+        assert len(a) == len(b) == len(c) == len(o)
     shuffled_a = np.empty(a.shape, dtype=a.dtype)
     shuffled_b = np.empty(b.shape, dtype=b.dtype)
     shuffled_c = np.empty(c.shape, dtype=c.dtype)
+    if o is not None:
+        shuffled_o = np.empty(o.shape, dtype=o.dtype)
     permutation = np.random.permutation(len(a))
     for old_index, new_index in enumerate(permutation):
         shuffled_a[new_index] = a[old_index]
         shuffled_b[new_index] = b[old_index]
         shuffled_c[new_index] = c[old_index]
-    return shuffled_a, shuffled_b, shuffled_c
+        if o is not None:
+            shuffled_o[new_index] = o[old_index]
+    if o is None:
+        return shuffled_a, shuffled_b, shuffled_c
+    else:
+        return shuffled_a, shuffled_b, shuffled_c, shuffled_o
 
 def bootstrap(gold, pred, reps=100000, printit=True):
     '''
@@ -445,7 +533,7 @@ def bootstrap(gold, pred, reps=100000, printit=True):
 
 
 def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevant=None):
-    (x_pos, y_pos, i_pos, f_pos), (x_neg, y_neg, i_neg, f_neg) = pos, neg
+    (x_pos, y_pos, i_pos, f_pos, o_pos), (x_neg, y_neg, i_neg, f_neg, o_neg) = pos, neg
 
     relevant_tweets = [[[False for i in range(2000)] for j in range(5507)] for k in range(10)]
     if relevant is not None:
@@ -464,23 +552,30 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevan
         X_train = list()
         y_train = list()
         f_train = list()
+        o_train = list()
         X_test = list()
         y_test = list()
         f_test = list()
+        o_test = list()
         X_dev = list()
         y_dev = list()
         f_dev = list()
+        o_dev = list()
         for user in folds[itern]:
             if user[1] == "Overweight" or user[1] == "risk":
                 position = np.where(i_pos == user[0])[0][0]
                 X_test.append(x_pos[position])
                 y_test.append(y_pos[position])
                 f_test.append(f_pos[position])
+                if len(o_pos) > 0:
+                    o_test.append(o_pos[position])
             else:
                 position = np.where(i_neg == user[0])[0][0]
                 X_test.append(x_neg[position])
                 y_test.append(y_neg[position])
                 f_test.append(f_neg[position])
+                if len(o_neg) > 0:
+                    o_test.append(o_neg[position])
         nitern = itern + 1
         if nitern == len(folds):
             nitern = 0
@@ -490,11 +585,16 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevan
                 X_dev.append(x_pos[position])
                 y_dev.append(y_pos[position])
                 f_dev.append(f_pos[position])
+                if len(o_pos) > 0:
+                    o_dev.append(o_pos[position])
             else:
                 position = np.where(i_neg == user[0])[0][0]
                 X_dev.append(x_neg[position])
                 y_dev.append(y_neg[position])
                 f_dev.append(f_neg[position])
+                if len(o_neg) > 0:
+                    o_dev.append(o_neg[position])
+
         for j in range(0, len(folds)):
             if itern != j and nitern != j:
                 for user in folds[j]:
@@ -503,28 +603,45 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevan
                         X_train.append(x_pos[position])
                         y_train.append(y_pos[position])
                         f_train.append(f_pos[position])
+                        if len(o_pos) > 0:
+                            o_train.append(o_pos[position])
                     else:
                         position = np.where(i_neg == user[0])[0][0]
                         X_train.append(x_neg[position])
                         y_train.append(y_neg[position])
                         f_train.append(f_neg[position])
+                        if len(o_neg) > 0:
+                            o_train.append(o_neg[position])
+
         X_train = np.array(X_train)
         y_train = np.array(y_train)
         f_train = np.array(f_train)
+        o_train = np.array(o_train)
         X_test = np.array(X_test)
         y_test = np.array(y_test)
         f_test = np.array(f_test)
+        o_test = np.array(o_test)
         X_dev = np.array(X_dev)
         y_dev = np.array(y_dev)
         f_dev = np.array(f_dev)
+        o_dev = np.array(o_dev)
 
         X_train = pad3d(X_train, maxtweets=maxtweets, maxlen=maxlen)
         X_test = pad3d(X_test, maxtweets=maxtweets, maxlen=maxlen)
         X_dev = pad3d(X_dev, maxtweets=maxtweets, maxlen=maxlen)
+        o_train = pad3d(o_train, maxtweets=maxtweets, maxlen=maxlen, dtype='float')
+        o_test = pad3d(o_test, maxtweets=maxtweets, maxlen=maxlen, dtype='float')
+        o_dev = pad3d(o_dev, maxtweets=maxtweets, maxlen=maxlen, dtype='float')
         train_shp = X_train.shape
         test_shp = X_test.shape
         dev_shp = X_dev.shape
-        
+      
+        o_train_flat = None
+        o_dev_flat = None
+        o_test_flat = None
+        o_train_shuff = None
+        o_dev_shuff = None
+        o_test_shuff = None
         X_train_flat = list()
         y_train_flat = list()
         f_train_flat = list()
@@ -535,41 +652,56 @@ def gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevan
                         X_train_flat.append(X_train[u][t])
                         y_train_flat.append(y_train[u])
                         f_train_flat.append(f_train[u])
+                        if len(o_train) > 0:
+                            o_train_flat.append(o_train[u][t])
         else:
             X_train_flat = X_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
             y_train_flat = y_train.repeat(train_shp[1])
             f_train_flat = f_train.repeat(train_shp[1], axis=0)
+            if len(o_train) > 0:
+                o_train_flat = o_train.reshape(train_shp[0] * train_shp[1], train_shp[2])
+
+
         X_train_flat = np.array(X_train_flat)
         y_train_flat = np.array(y_train_flat)
         f_train_flat = np.array(f_train_flat)
-        X_train_shuff, y_train_shuff, f_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat, f_train_flat)
+        if len(o_train) > 0:
+            o_train_flat = np.array(o_train_flat)
+            X_train_shuff, y_train_shuff, f_train_shuff, o_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat, f_train_flat, o=o_train_flat)
+        else:
+            X_train_shuff, y_train_shuff, f_train_shuff = shuffle_in_unison(X_train_flat, y_train_flat, f_train_flat)
 
         X_test_flat = X_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
         y_test_flat = y_test.repeat(test_shp[1])
         f_test_flat = f_test.repeat(test_shp[1], axis=0)
+        if len(o_test) > 0:
+            o_test_flat = o_test.reshape(test_shp[0] * test_shp[1], test_shp[2])
+            X_test_shuff, y_test_shuff, f_test_shuff, o_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat, f_test_flat, o=o_test_flat)
+        else:
+            X_test_shuff, y_test_shuff, f_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat, f_test_flat)
 
         X_dev_flat = X_dev.reshape(dev_shp[0] * dev_shp[1], dev_shp[2])
         y_dev_flat = y_dev.repeat(dev_shp[1])
         f_dev_flat = f_dev.repeat(dev_shp[1], axis=0)
-        
-        # We shuffle the flattened reps. for better training
-        # (but keep the original order for our by-account classification)
-        X_test_shuff, y_test_shuff, f_test_shuff = shuffle_in_unison(X_test_flat, y_test_flat, f_test_flat)
-        X_dev_shuff, y_dev_shuff, f_dev_shuff = shuffle_in_unison(X_dev_flat, y_dev_flat, f_dev_flat)
+        if len(o_dev) > 0:
+            o_dev_flat = o_dev.reshape(dev_shp[0] * dev_shp[1], dev_shp[2])
+            X_dev_shuff, y_dev_shuff, f_dev_shuff, o_dev_shuff = shuffle_in_unison(X_dev_flat, y_dev_flat, f_dev_flat, o=o_dev_flat)
+        else:
+            X_dev_shuff, y_dev_shuff, f_dev_shuff = shuffle_in_unison(X_dev_flat, y_dev_flat, f_dev_flat)
 
         # just clearing up space -- from now on, we use the flattened representations
         del X_train
         del X_test
         del X_dev
-        
+
         iteration = list()
         iteration.append('fold' + str(itern))
         iteration.append((X_train_flat, X_train_shuff, y_train, y_train_flat, y_train_shuff, 
-                          f_train, f_train_flat, f_train_shuff, train_shp))
+                          f_train, f_train_flat, f_train_shuff, o_train_flat, o_train_shuff, train_shp))
         iteration.append((X_test_flat, X_test_shuff, y_test, y_test_flat, y_test_shuff,
-                          f_test, f_test_flat, f_test_shuff, test_shp))
+                          f_test, f_test_flat, f_test_shuff, o_test_flat, o_test_shuff, test_shp))
         iteration.append((X_dev_flat, X_dev_shuff, y_dev, y_dev_flat, y_dev_shuff,
-                          f_dev, f_dev_flat, f_dev_shuff, dev_shp))
+                          f_dev, f_dev_flat, f_dev_shuff, o_dev_flat, o_dev_shuff, dev_shp))
         yield iteration
         
 
@@ -607,25 +739,133 @@ def new_outs_lengths(input_lenght, kernel_size, padding=0, dilation=1, stride=1)
 #    
 #   The Model
 #
+
+
+class MLP(nn.Module):
+    def __init__(self, max_features, max_len, embedding_dim, hidden_size, feats=0):
+        super(MLP, self).__init__()
+        self.hidden_size = hidden_size
+        self.embs = nn.Embedding(max_features + 3, embedding_dim)
+        self.linear1 = nn.Linear(embedding_dim, hidden_size)
+        self.tanh1 = nn.Tanh()
+        #self.linear2 = nn.Linear(hidden_size, hidden_size)
+        #self.tanh2 = nn.Tanh()
+        self.dropout = nn.Dropout(p=0.4)
+        self.linear = nn.Linear(hidden_size * (1 + feats * 2), 1)
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, inputs, test_mode=False, domain=[None,None], o=None):
+        embeds = self.embs(inputs)
+        if o is not None:
+            embeds = embeds.transpose(1,2).transpose(0,1)
+            embeds =  torch.mul(embeds, o).transpose(0,1).transpose(1,2)
+            nonzero = o
+        else:
+            nonzero = embeds
+            nonzero = torch.sum(nonzero, 2)
+            nonzero[nonzero!=0.]=1
+        nonzero = torch.sum(nonzero, 0)
+        nonzero[nonzero==0.]=1e-16
+        nonzero = nonzero.repeat(embeds.size(2),1).transpose(0,1)
+        out = torch.sum(embeds, 0) / nonzero
+        out = self.tanh1(self.linear1(out))
+        #out = self.tanh2(self.linear2(out))
+        outc = out
+
+        if domain[0] is not None or domain[1] is not None:
+            if CUDA_MODE:
+                zeros = Variable(torch.zeros(out.size()).cuda())
+            else:            
+                zeros = Variable(torch.zeros(out.size()))
+        
+        if domain[0] == 0:
+            out = torch.cat((out,outc,zeros),1)
+        elif domain[0] == 1:
+            out = torch.cat((out,zeros,outc),1)
+        elif domain[0] == 2:
+            out = torch.cat((out,zeros,zeros),1)
+      
+        if domain[1] == 0:
+            out = torch.cat((out,outc,zeros),1)
+        elif domain[1] == 1:
+            out = torch.cat((out,zeros,outc),1)
+        elif domain[1] == 2:
+            out = torch.cat((out,zeros,zeros),1)
+                       
+        if not test_mode:
+            out = self.dropout(out)
+        out = self.sigmoid(self.linear(out))
+
+        return out
+
+
+class GRU(nn.Module):
+    def __init__(self, max_features, embedding_dim, hidden_size, feats=0):
+        super(GRU, self).__init__()
+        self.hidden_size = hidden_size
+        self.embs = nn.Embedding(max_features + 3, embedding_dim)
+        self.gru = nn.GRU(embedding_dim, hidden_size, dropout=0.2)
+        self.dropout = nn.Dropout(p=0.4)
+        self.linear = nn.Linear(hidden_size * (1 + feats * 2), 1)
+        self.sigmoid = nn.Sigmoid()
+        
+    def forward(self, inputs, test_mode=False, domain=[None,None]):
+        embeds = self.embs(inputs)
+        out, _ = self.gru(embeds)
+        out = out[-1]
+        outc = out.contiguous()
+        out = outc
+
+        if domain[0] is not None or domain[1] is not None: 
+            if CUDA_MODE:
+                zeros = Variable(torch.zeros(out.size()).cuda())
+            else:            
+                zeros = Variable(torch.zeros(out.size()))
+
+        if domain[0] == 0:
+            out = torch.cat((out,outc,zeros),1)
+        elif domain[0] == 1:
+            out = torch.cat((out,zeros,outc),1)
+        elif domain[0] == 2:
+            out = torch.cat((out,zeros,zeros),1)
+      
+        if domain[1] == 0:
+            out = torch.cat((out,outc,zeros),1)
+        elif domain[1] == 1:
+            out = torch.cat((out,zeros,outc),1)
+        elif domain[1] == 2:
+            out = torch.cat((out,zeros,zeros),1)
+        
+                       
+        if not test_mode:
+            out = self.dropout(out)
+        out = self.sigmoid(self.linear(out))
+        return out.view(-1)
+
+
     
 class CNN(nn.Module):
     def __init__(self, max_features, embedding_dim, seq_length, nb_filter,
-                 filter_length, pool_length, hidden_size, feats=0):
+                 filter_length, pool_length, hidden_size, feats=0, order=0):
         super(CNN, self).__init__()
         cnn_out_length = new_outs_lengths(seq_length, filter_length)
         pool_out_length = new_outs_lengths(cnn_out_length, pool_length, stride=pool_length)
         self.embs = nn.Embedding(max_features + 3, embedding_dim)
-        self.cnn = nn.Conv1d(embedding_dim, nb_filter, filter_length)
-        self.pool = nn.MaxPool1d(pool_length)        
+        self.cnn = nn.Conv1d(embedding_dim + order, nb_filter, filter_length)
+        self.pool = nn.MaxPool1d(pool_length)
         self.linear1 = nn.Linear(int(pool_out_length) * nb_filter, hidden_size)
         self.relu1 = nn.ReLU()
         self.dropout1 = nn.Dropout(p=0.4)
         self.linear2 = nn.Linear(hidden_size * (1 + feats * 2), 1)
         self.sigmoid2 = nn.Sigmoid()
         
-    def forward(self, inputs, intermediate=False, test_mode=False, domain=[None,None]):
+    def forward(self, inputs, intermediate=False, test_mode=False, domain=[None,None], o=None):
         embeds = self.embs(inputs)
         embeds = embeds.transpose(0, 1).transpose(1, 2)
+        if o is not None:
+            o = o.transpose(0, 1)
+            o = o.view(o.size()[0],1,o.size()[1])
+            embeds = torch.cat((embeds,o),1)
         outc = self.cnn(embeds)
         outc = self.pool(outc)
         outc = outc.view((outc.size()[0], outc.size()[1] * outc.size()[2]))
@@ -642,11 +882,15 @@ class CNN(nn.Module):
             out = torch.cat((out,outc,zeros),1)
         elif domain[0] == 1:
             out = torch.cat((out,zeros,outc),1)
+        elif domain[0] == 2:
+            out = torch.cat((out,zeros,zeros),1)
       
         if domain[1] == 0:
             out = torch.cat((out,outc,zeros),1)
         elif domain[1] == 1:
             out = torch.cat((out,zeros,outc),1)
+        elif domain[1] == 2:
+            out = torch.cat((out,zeros,zeros),1)
                        
         if not test_mode:
             out = self.dropout1(out)
@@ -656,22 +900,33 @@ class CNN(nn.Module):
 
 
         
-def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
+def predict(net, x, f, o, batch_size, intermediate=False, domain=[False,False]):
     pred = np.empty(0)
     batches = math.ceil(x.size()[0] / batch_size)
     for b in range(batches):
         bx = x[b*batch_size:b*batch_size+batch_size]
+        if o is not None:
+            bo = o[b*batch_size:b*batch_size+batch_size]
+
 
         # No domain
         if domain[0] == domain[1] == False:
             bx = torch.transpose(bx, 0, 1)
-            b_pred = net(bx, test_mode=True)
-            del(bx)
+            if o is not None:
+                bo = torch.transpose(bo, 0, 1)
+                b_pred = net(bx, test_mode=True, o=bo)
+                del(bx,bo)
+            else:
+                b_pred = net(bx, test_mode=True)
+                del(bx)
             
         # Only one domain
         elif domain[0] == False or domain[1] == False:
             bf = f[b*batch_size:b*batch_size+batch_size]
-            
+            fb = None
+            mb = None
+            ub = None
+
             if domain[1] == False:
                 idx = torch.np.where(bf[:,0]==0)[0]
                 if np.shape(idx)[0] == 0:
@@ -692,11 +947,17 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             if fb.dim() > 0:
                 bxf = bx[fb]
                 bxf = torch.transpose(bxf, 0, 1)
+                if o is not None:
+                    bof = bo[fb]
+                    bof = torch.transpose(bof, 0, 1)
+                else:
+                    bof = None
+
                 if domain[1] == False:
-                    f_pred = net(bxf, test_mode=True, domain=[0,None])
+                    f_pred = net(bxf, test_mode=True, domain=[0,None], o=bof)
                 else:
                     f_pred = net(bxf, test_mode=True, domain=[None,0])
-                del(bxf)
+                del(bxf, bof)
 
             if domain[1] == False:
                 idx = torch.np.where(bf[:,0]==1)[0]
@@ -718,29 +979,96 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
             if mb.dim() > 0:
                 bxm = bx[mb]
                 bxm = torch.transpose(bxm, 0, 1)
-                if domain[1] == False:
-                    m_pred = net(bxm, test_mode=True, domain=[1,None])
+                if o is not None:
+                    bom = bo[mb]
+                    bom = torch.transpose(bom, 0, 1)
                 else:
-                    m_pred = net(bxm, test_mode=True, domain=[None,1])
-                del(bxm)
+                    bom = None
+                if domain[1] == False:
+                    m_pred = net(bxm, test_mode=True, domain=[1,None], o=bom)
+                else:
+                    m_pred = net(bxm, test_mode=True, domain=[None,1], o=bom)
+                del(bxm, bom)
+
+            # UNK/UNK
+
+            if domain[1] == False:
+                idx = torch.np.where(bf[:,0]==None)[0]
+                if np.shape(idx)[0] == 0:
+                    ub = torch.LongTensor()
+                else:
+                    ub = torch.LongTensor(idx)
+            else:
+                idx = torch.np.where(bf[:,2]==None)[0]
+                if np.shape(idx)[0] == 0:
+                    ub = torch.LongTensor()
+                else:
+                    ub = torch.LongTensor(idx)  
+            if CUDA_MODE:
+                ub = ub.cuda()
+                u_pred = Variable(torch.LongTensor().cuda())
+            else:
+                u_pred = Variable(torch.LongTensor())
+            if ub.dim() > 0:
+                bxu = bx[ub]
+                bxu = torch.transpose(bxu, 0, 1)
+                if o is not None:
+                    bou = bo[ub]
+                    bou = torch.transpose(bou, 0, 1)
+                else:
+                    bou = None
+                if domain[1] == False:
+                    u_pred = net(bxu, test_mode=True, domain=[2,None], o=bou)
+                else:
+                    u_pred = net(bxu, test_mode=True, domain=[None,2], o=bou)
+                del(bxu, bou)
     
             del(bf)
-                    
-            if fb.dim() > 0 and mb.dim() > 0:
-                cb = torch.cat((fb, mb))
-                del(fb, mb)
-                b_pred = torch.cat((f_pred, m_pred))
-                del(f_pred, m_pred)
-            elif fb.dim() > 0:
+
+
+            if fb.dim() > 0:
                 cb = fb
                 del(fb)
                 b_pred = f_pred
                 del(f_pred)
-            else:
-                cb = mb
-                del (mb)
-                b_pred = m_pred
+            if mb.dim() > 0:
+                if 'cb' in locals():
+                    cb = torch.cat((cb, mb))
+                else:
+                    cb = mb
+                del(mb)
+                if 'b_pred' in locals():
+                    b_pred = torch.cat((b_pred, m_pred))
+                else:
+                    b_pred = m_pred
                 del(m_pred)
+            if ub.dim() > 0:
+                if 'cb' in locals():
+                    cb = torch.cat((cb, ub))
+                else:
+                    cb = ub
+                del(ub)
+                if 'b_pred' in locals():
+                    b_pred = torch.cat((b_pred, u_pred))
+                else:
+                    b_pred = u_pred
+                del(u_pred)
+                    
+            # if fb.dim() > 0 and mb.dim() > 0:
+            #     cb = torch.cat((fb, mb))
+            #     del(fb, mb)
+            #     b_pred = torch.cat((f_pred, m_pred))
+            #     del(f_pred, m_pred)
+            # elif fb.dim() > 0:
+            #     cb = fb
+            #     del(fb)
+            #     b_pred = f_pred
+            #     del(f_pred)
+            # else:
+            #     cb = mb
+            #     del (mb)
+            #     b_pred = m_pred
+            #     del(m_pred)
     
             if CUDA_MODE:
                 cb = torch.LongTensor(torch.np.argsort(cb.cpu().numpy())).cuda()
@@ -860,9 +1188,8 @@ def predict(net, x, f, batch_size, intermediate=False, domain=[False,False]):
     return pred
 
     
-def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
-    criterion = nn.BCELoss()
-    parameters = filter(lambda p: p.requires_grad, net.parameters())                                                                                                    
+def train(net, x, y, f, o, nepochs, batch_size, domain=[False,False], class_weight=0.5):
+    parameters = filter(lambda p: p.requires_grad, net.parameters())
     optimizer = optim.Adam(parameters)
     batches = math.ceil(x.size()[0] / batch_size)
     for e in range(nepochs):
@@ -871,19 +1198,31 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
             # Get minibatch samples
             bx = x[b*batch_size:b*batch_size+batch_size]
             by = y[b*batch_size:b*batch_size+batch_size]
-            
+            if o is not None:
+                bo = o[b*batch_size:b*batch_size+batch_size]
+
             # Clear gradients
             net.zero_grad()
 
             # No domain
             if domain[0] == domain[1] == False:
                 bx = torch.transpose(bx, 0, 1)
-                y_pred = net(bx)
-                del(bx)
-            
+                if o is not None:
+                    bo = torch.transpose(bo, 0, 1)
+                    y_pred = net(bx, o=bo)
+                    del(bx, bo)
+                else:
+                    y_pred = net(bx)
+                    del(bx)
+                    
             # Only one domain
             elif domain[0] == False or domain[1] == False:
                 bf = f[b*batch_size:b*batch_size+batch_size]
+                fb = None
+                mb = None
+                ub = None
+
+                # FEMALE/NO-RETWEET
 
                 if domain[1] == False:
                     idx = torch.np.where(bf[:,0]==0)[0]
@@ -904,7 +1243,14 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
                     bxf = bx[fb]
                     byf = by[fb]
                     bxf = torch.transpose(bxf, 0, 1)
-    
+                    if o is not None:
+                        bof = bo[fb]
+                        bof = torch.transpose(bof, 0, 1)
+                    else:
+                        bof = None
+
+                # MALE/RETWEET
+
                 if domain[1] == False:
                     idx = torch.np.where(bf[:,0]==1)[0]
                     if np.shape(idx)[0] == 0:
@@ -924,50 +1270,120 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
                     bxm = bx[mb]
                     bym = by[mb]
                     bxm = torch.transpose(bxm, 0, 1)
-                                
+                    if o is not None:
+                        bom = bo[mb]
+                        bom = torch.transpose(bom, 0, 1)
+                    else:
+                        bom = None
+
+                # UNK/UNK
+
+                if domain[1] == False:
+                    idx = torch.np.where(bf[:,0]==None)[0]
+                    if np.shape(idx)[0] == 0:
+                        ub = torch.LongTensor()
+                    else:
+                        ub = torch.LongTensor(idx)
+                else:
+                    idx = torch.np.where(bf[:,2]==None)[0]
+                    if np.shape(idx)[0] == 0:
+                        ub = torch.LongTensor()
+                    else:
+                        ub = torch.LongTensor(idx)             
+                if CUDA_MODE:
+                    ub = ub.cuda()
+
+                if ub.dim() > 0:
+                    bxu = bx[ub]
+                    byu = by[ub]
+                    bxu = torch.transpose(bxu, 0, 1)
+                    if o is not None:
+                        bou = bo[ub]
+                        bou = torch.transpose(bou, 0, 1)                                
+                    else:
+                        bou = None
+
                 del(bx, bf)
+                if o is not None:
+                    del(bo)
 
 
                 # Forward pass
                 if domain[1] == False:
                     if fb.dim() > 0:
-                        yf_pred = net(bxf, domain=[0,None])
-                        del(bxf)
+                        yf_pred = net(bxf, domain=[0,None], o=bof)
+                        del(bxf, bof)
                     if mb.dim() > 0:
-                        ym_pred = net(bxm, domain=[1,None])
-                        del(bxm)
+                        ym_pred = net(bxm, domain=[1,None], o=bom)
+                        del(bxm, bom)
+                    if ub.dim() > 0:
+                        yu_pred = net(bxu, domain=[2,None], o=bou)
+                        del(bxu, bou)
                 else:
                     if fb.dim() > 0:
-                        yf_pred = net(bxf, domain=[None,0])
-                        del(bxf)
+                        yf_pred = net(bxf, domain=[None,0], o=bof)
+                        del(bxf, bof)
                     if mb.dim() > 0:
-                        ym_pred = net(bxm, domain=[None,1])
-                        del(bxm)
-                    
-                if fb.dim() > 0 and mb.dim() > 0:
-                #    cb = torch.cat((fb, mb))
-                    del(fb, mb)
-                    y_pred = torch.cat((yf_pred, ym_pred))
-                    del(yf_pred, ym_pred)
-                elif fb.dim() > 0:
-                #    cb = fb
+                        ym_pred = net(bxm, domain=[None,1], o=bom)
+                        del(bxm, bom)
+                    if ub.dim() > 0:
+                        yu_pred = net(bxu, domain=[None,2], o=bou)
+                        del(bxu, bou)
+
+                if fb.dim() > 0:
+                    cb = fb
                     del(fb)
                     y_pred = yf_pred
                     del(yf_pred)
-                else:
-                #    cb = mb
-                    del (mb)
-                    y_pred = ym_pred
+                if mb.dim() > 0:
+                    if 'cb' in locals():
+                        cb = torch.cat((cb, mb))
+                    else:
+                        cb = mb
+                    del(mb)
+                    if 'y_pred' in locals():
+                        y_pred = torch.cat((y_pred, ym_pred))
+                    else:
+                        y_pred = ym_pred
                     del(ym_pred)
+                if ub.dim() > 0:
+                    if 'cb' in locals():
+                        cb = torch.cat((cb, ub))
+                    else:
+                        cb = ub
+                    del(ub)
+                    if 'y_pred' in locals():
+                        y_pred = torch.cat((y_pred, yu_pred))
+                    else:
+                        y_pred = yu_pred
+                    del(yu_pred)
 
 
-                #if CUDA_MODE:
-                #    cb = torch.LongTensor(torch.np.argsort(cb.cpu().numpy())).cuda()
-                #else:
-                #    cb = torch.LongTensor(torch.np.argsort(cb.numpy()))    
+
+                # if fb.dim() > 0 and mb.dim() > 0:
+                # #    cb = torch.cat((fb, mb))
+                #     del(fb, mb)
+                #     y_pred = torch.cat((yf_pred, ym_pred))
+                #     del(yf_pred, ym_pred)
+                # elif fb.dim() > 0:
+                # #    cb = fb
+                #     del(fb)
+                #     y_pred = yf_pred
+                #     del(yf_pred)
+                # else:
+                # #    cb = mb
+                #     del (mb)
+                #     y_pred = ym_pred
+                #     del(ym_pred)
+
+
+                if CUDA_MODE:
+                   cb = torch.LongTensor(torch.np.argsort(cb.cpu().numpy())).cuda()
+                else:
+                   cb = torch.LongTensor(torch.np.argsort(cb.numpy()))    
     
-                #y_pred = y_pred[cb]
-                #del(cb)
+                y_pred = y_pred[cb]
+                del(cb)
 
 
                 #by = torch.cat((byf, bym))
@@ -1054,6 +1470,9 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
                 del(ypred_list)
                                 
             # Compute loss
+            byW = [class_weight if cy == 1. else 1. - class_weight for cy in by.data]
+            byW = Variable(torch.FloatTensor([byW]))
+            criterion = nn.BCELoss(weight=byW)
             loss = criterion(y_pred, by)
             del(by)
             
@@ -1064,6 +1483,7 @@ def train(net, x, y, f, nepochs, batch_size, domain=[False,False]):
 
             # Backward propagation and update the weights.
             loss.backward()
+            net.embs.weight.grad.data[0:3,:].fill_(0)
             optimizer.step()
             del(y_pred)
         sys.stdout.write('\n')
@@ -1097,12 +1517,12 @@ if args.setting is not None:
     batch_size = int(config['SETTING']['batch_size'])
     predict_batch_size = int(config['SETTING']['predict_batch_size'])
 
-embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim, w2v=emb_file)
-
+embeddings, max_features = load_embeddings(nb_words=max_features, emb_dim=emb_dim, w2v=emb_file)
 
 if run_fold is not None:
     run_fold = ['fold' + str(rf) for rf in run_fold]
 pos, neg = load_data(nb_words=max_features, maxlen=maxlen, seed=SEED)
+
 predictions = dict()
 if not vary_th:
     predictions["cnnv"] = list()
@@ -1114,7 +1534,8 @@ gold_test = list()
 iterations = list()
 #foldsfile = "folds.csv"
 #foldsfile = "foldsrisk.csv"
-foldsfile = "foldsdow.csv"
+foldsfile = "foldsriskdict.csv"
+#foldsfile = "foldsdow.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile, relevant=tweet_filter):
     iterid = iteration[0]
@@ -1124,16 +1545,24 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     print('')
     print('Iteration: %s' % iterid)
     (_, X_train_shuff, _, _, y_train_shuff,
-     _, _, f_train_shuff, train_shp) = iteration[1]
+     _, _, f_train_shuff, _, o_train_shuff,train_shp) = iteration[1]
     (X_test_flat, _, y_test, _, _,
-     _, f_test_flat, _, test_shp) = iteration[2]
+     _, f_test_flat, _, o_test_flat, _, test_shp) = iteration[2]
     (X_dev_flat, _, y_dev, _, _,
-     _, f_dev_flat, _, dev_shp) = iteration[3]
-    
+     _, f_dev_flat, _, o_dev_flat, _, dev_shp) = iteration[3]
+   
+    if not wordorder:
+        o_train_shuff = None
+        o_test_flat = None
+        o_dev_flat = None
+
     print('X_train shape:', train_shp)
     print('X_test shape:', test_shp)
     print('X_dev shape:', dev_shp)
  
+    order = 0
+    if o_train_shuff is not None:
+        order = 1
      
     gold_dev = y_dev.flatten()
     if dev_mode:
@@ -1149,7 +1578,12 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
     
         print('Build first model (tweet-level)...')
         num_feats = int(np.sum(np.array(domain)==True))
-        net = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, hidden_dim, feats=num_feats)
+        if model_gru:
+            net = GRU(max_features, emb_dim, hidden_dim, feats=num_feats)
+        if model_mlp:
+            net = MLP(max_features, maxlen, emb_dim, hidden_dim, feats=num_feats)
+        else:
+            net = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, hidden_dim, feats=num_feats, order=order)
         print(net)
         if freeze:
             net.embs.weight.requires_grad = False
@@ -1162,39 +1596,69 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 net = net.cuda()
         else:
             net.embs.weight.data.copy_(torch.from_numpy(np.array(embeddings)))
+
+            if train_percent is not None:
+                if train_percent == 1.0:
+                    ceil = len(X_train_shuff)
+                    floor = 0
+                else:
+                    ceil = int(len(X_train_shuff) * train_percent)
+                    floor = np.random.choice(np.arange(0,len(X_train_shuff)-ceil))
+                X_train_shuff = X_train_shuff[floor:floor+ceil]
+                y_train_shuff = y_train_shuff[floor:floor+ceil]
+                f_train_shuff = f_train_shuff[floor:floor+ceil]
+                if o_train_shuff is not None:
+                    o_train_shuff = o_train_shuff[floor:floor+ceil]
+
+
+            data_o = None
             if CUDA_MODE:
                 net = net.cuda()
                 data_x = Variable(torch.from_numpy(X_train_shuff).long().cuda())
                 data_y = Variable(torch.from_numpy(y_train_shuff).float().cuda())
+                if o_train_shuff is not None:
+                    data_o = Variable(torch.from_numpy(o_train_shuff).float().cuda())
             else:
-                data_x = Variable(torch.from_numpy(X_train_shuff).long())        
+                data_x = Variable(torch.from_numpy(X_train_shuff).long())
                 data_y = Variable(torch.from_numpy(y_train_shuff).float())
+                if o_train_shuff is not None:
+                    data_o = Variable(torch.from_numpy(o_train_shuff).float())
             data_f = f_train_shuff
             
             print('Train...')
-            train(net, data_x, data_y, data_f, nb_epoch, batch_size, domain=domain)
-            del(data_x, data_y, data_f)
+            train(net, data_x, data_y, data_f, data_o, nb_epoch, batch_size, domain=domain, class_weight=posW)
+            del(data_x, data_y, data_f, data_o)
             torch.save(net.state_dict(), model_dir + 'tweet_classifier_' + iterid + '.pkl')
             
     
         #
         #  CNN+V/CNN+W
         #
-    
-        if not vary_th:
+
+        if fixed_th is not None:
+            print('Threshold fixed to: %f' % fixed_th)
+            thldmn = fixed_th
+            thldwm = fixed_th
+
+        elif not vary_th:
             # Prediction for DEV set
             print('Dev...')
+            data_o = None
             if CUDA_MODE:
                 data_x = Variable(torch.from_numpy(X_dev_flat).long().cuda())
+                if o_dev_flat is not None:
+                    data_o = Variable(torch.from_numpy(o_dev_flat).float().cuda())
             else:
                 data_x = Variable(torch.from_numpy(X_dev_flat).long())
+                if o_dev_flat is not None:
+                    data_o = Variable(torch.from_numpy(o_dev_flat).float())
             data_f = f_dev_flat
         
-            predDev = predict(net, data_x, data_f, predict_batch_size, domain=domain)
-            del(data_x, data_f)
+            predDev = predict(net, data_x, data_f, data_o, predict_batch_size, domain=domain)
+            del(data_x, data_f, data_o)
             predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
-            wts = np.linspace(1., 0.01, 2000)
+            wts = np.linspace(1., 0.01, maxtweets)
             if outliers:
                 min_out = np.mean(predDev) - np.std(predDev)
                 max_out = np.mean(predDev) + np.std(predDev)
@@ -1254,16 +1718,21 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 pass
 
             print('Test...')
+            data_o = None
             if CUDA_MODE:
                 data_x = Variable(torch.from_numpy(X_test_flat).long().cuda())
+                if o_test_flat is not None:
+                    data_o = Variable(torch.from_numpy(o_test_flat).float().cuda())
             else:
                 data_x = Variable(torch.from_numpy(X_test_flat).long())
+                if o_test_flat is not None:
+                    data_o = Variable(torch.from_numpy(o_test_flat).float())
             data_f = f_test_flat
-            predTest = predict(net, data_x, data_f, predict_batch_size, domain=domain)
-            del(data_x, data_f)
+            predTest = predict(net, data_x, data_f, data_o, predict_batch_size, domain=domain)
+            del(data_x, data_f, data_o)
             predTest = predTest.reshape((test_shp[0], test_shp[1]))
 
-            wts = np.linspace(1., 0.01, 2000)
+            wts = np.linspace(1., 0.01, maxtweets)
             if outliers:
                 min_out = np.mean(predTest) - np.std(predTest)
                 max_out = np.mean(predTest) + np.std(predTest)
@@ -1307,7 +1776,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
                 predTestwmthld = list()
                 start = 0.
                 stop = 1.
-                step = 0.05
+                step = 0.005
                 for thld in np.arange(start, stop, step):
                     print('CNN+V with threshold = ', thld)
                     predTestmnthld.append((thld, (predTestmn >= thld).astype(int)))

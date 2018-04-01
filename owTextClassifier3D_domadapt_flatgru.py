@@ -50,6 +50,8 @@ parser.add_argument('--max_words', default=20000,
                     help='run for an expecific fold.')
 parser.add_argument('--setting', default=None,
                     help='hyperparameter setting file.')
+parser.add_argument('--emb_file', default='food_vectors_clean.txt',
+                    help='file with word embeddings.')
 parser.add_argument('--dev', action='store_true',
                     help='test on development set')
 parser.add_argument('--tweetrel', action='store_true',
@@ -78,6 +80,7 @@ tweetrel = args.tweetrel
 outliers = args.outliers
 vary_th = args.vary_th
 fixed_th = args.fixed_th
+emb_file = args.emb_file
 
 pred_dir = 'predictions'
 if dev_mode:
@@ -162,7 +165,10 @@ def push_indices(x, start, index_from):
         return x
 
 #def load_data(path='ow3df.pkl', nb_words=None, skip_top=0,
-def load_data(path='risk3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3df.pkl', nb_words=None, skip_top=0,
+#def load_data(path='dow3df.pkl', nb_words=None, skip_top=0,
+def load_data(path='risk3dfdict.pkl', nb_words=None, skip_top=0,
+#def load_data(path='risk3dfdictu10t.pkl', nb_words=None, skip_top=0,
 #def load_data(path='data_toy/ow3df.pkl', nb_words=None, skip_top=0,
               maxlen=None, seed=113, start=1, oov=2, index_from=3):
     '''
@@ -254,7 +260,10 @@ def load_data(path='risk3df.pkl', nb_words=None, skip_top=0,
 
 def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
                     #vocab='ow3df.dict.pkl', 
-                    vocab='risk3df.dict.pkl', 
+                    #vocab='risk3df.dict.pkl', 
+                    #vocab='dow3df.dict.pkl',
+                    vocab='risk3dfdict.dict.pkl',  
+                    #vocab='risk3dfdictu10t.dict.pkl',
                     #vocab='data_toy/ow3df.dict.pkl', 
                     w2v='food_vectors_clean.txt'):
 
@@ -289,6 +298,7 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
     print("")
     print('Found %s word vectors.' % len(embeddings_index))
     
+    max_features = min(max_features, len(embeddings_index))
     embedding_matrix = np.zeros((max_features+index_from, emb_dim))
     for word, i in word_index.items():
         if i < max_features:
@@ -297,7 +307,7 @@ def load_embeddings(nb_words=None, emb_dim=200, index_from=3,
                 # words not found in embedding index will be all-zeros.
                 embedding_matrix[i+index_from] = embedding_vector
 
-    return embedding_matrix
+    return embedding_matrix, max_features
 
 def load_folds(file, seed=113):
     print ("Loading folds...")
@@ -917,7 +927,7 @@ if args.setting is not None:
     predict_batch_size = int(config['SETTING']['predict_batch_size'])
     batch_size_gru = int(config['SETTING']['gru_batch_size'])
 
-embeddings = load_embeddings(nb_words=max_features, emb_dim=emb_dim)
+embeddings, max_features = load_embeddings(nb_words=max_features, emb_dim=emb_dim, w2v=emb_file)
 
 if run_fold is not None:
     run_fold = ['fold' + str(rf) for rf in run_fold]
@@ -931,8 +941,10 @@ else:
     predictions["gruw"] = dict()
 gold_test = list()
 iterations = list()
-foldsfile = "folds.csv"
-foldsfile = "foldsrisk.csv"
+#foldsfile = "folds.csv"
+#foldsfile = "foldsrisk.csv"
+#foldsfile = "foldsdow.csv"
+foldsfile = "foldsriskdict.csv"
 #foldsfile = "data_toy/folds.csv"
 for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, foldsfile):
     iterid = iteration[0]
@@ -978,7 +990,8 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             # Pre-train tweet-level vectors
             #
             print('Build first model (tweet-level)...')
-            cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
+            cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, hidden_dim, feats=num_feats)
+            print(cnn)
 
             # Train or load the model
             print('Loading model weights...')
@@ -1016,6 +1029,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             del(cnn)
 
             gru = GRU(128, 128, feats=num_feats)
+            print(gru)
             if CUDA_MODE:
                 gru = gru.cuda()
                 data_x = Variable(torch.from_numpy(X_train_mid).float().cuda())
@@ -1039,7 +1053,6 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             print('Getting dev tweet embeddings...')
             print('Build first model (tweet-level)...')
             cnn = CNN(max_features, emb_dim, maxlen, nb_filter, filter_length, pool_length, 128, feats=num_feats)
-
             # Train or load the model
             print('Loading CNN model weights...')
             cnn.load_state_dict(torch.load(model_dir + 'tweet_classifier_' + iterid + '.pkl'))
@@ -1077,7 +1090,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             del(gru)
             predDev = predDev.reshape((dev_shp[0], dev_shp[1]))
 
-            wts = np.linspace(0.01, 1., 2000)
+            wts = np.linspace(0.01, 1., maxtweets)
             if outliers:
                 min_out = np.mean(predDev) - np.std(predDev)
                 max_out = np.mean(predDev) + np.std(predDev)
@@ -1181,7 +1194,7 @@ for iteration in gen_iterations(pos, neg, max_features, maxtweets, maxlen, folds
             del(gru)
             predTest = predTest.reshape((test_shp[0], test_shp[1]))
     
-            wts = np.linspace(0.01, 1., 2000)
+            wts = np.linspace(0.01, 1., maxtweets)
             if outliers:
                 min_out = np.mean(predTest) - np.std(predTest)
                 max_out = np.mean(predTest) + np.std(predTest)
