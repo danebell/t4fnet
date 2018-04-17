@@ -14,7 +14,7 @@
 
 # In[1]:
 
-#dataset_path='/home/egoitz/Data/Datasets/SocialMedia/twitter4food/overweightData_tokenized/features/'
+# dataset_path='/home/egoitz/Data/Datasets/SocialMedia/twitter4food/overweightData_tokenized/features/'
 dataset_path='/home/egoitz/Code/python/git/t4fnet/data_toy/features/'
 
 # In[2]:
@@ -144,15 +144,15 @@ y_pos = [1] * len(x_pos)
 y_neg = [0] * len(x_neg)
 print('%i accounts' % (len(y_pos) + len(y_neg)))
 
-#f = open('ow3df.pkl', 'wb')
-#f = open('data_toy/ow3df.pkl', 'wb')
+# f = open('ow3df.pkl', 'wb')
+# f = open('data_toy/ow3df.pkl', 'wb')
 f = open('data_toy/ow3df2.pkl', 'wb')
 pkl.dump((x_pos, i_pos, f_pos, y_pos), f, -1)
 pkl.dump((x_neg, i_neg, f_neg, y_neg), f, -1)
 f.close()
 
-#f = open('ow3df.dict.pkl', 'wb')
-#f = open('data_toy/ow3df.dict.pkl', 'wb')
+# f = open('ow3df.dict.pkl', 'wb')
+# f = open('data_toy/ow3df.dict.pkl', 'wb')
 f = open('data_toy/ow3df2.dict.pkl', 'wb')
 pkl.dump(dictionary, f, -1)
 pkl.dump(features, f, -1)
