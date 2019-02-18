@@ -27,9 +27,11 @@
 # dataset_path=['/data/nlp/corpora/twitter4food/diabetes/rawTokens/risk_gold_dictOnly',
 #               '/data/nlp/corpora/twitter4food/diabetes/rawTokens/not_gold_dictOnly']
 
-dataset_path=['/data/nlp/corpora/twitter4food/diabetes/rawTokens/risk_pred_dictOnly',
-             '/data/nlp/corpora/twitter4food/diabetes/rawTokens/not_pred_dictOnly']
+# dataset_path=['/data/nlp/corpora/twitter4food/diabetes/rawTokens/risk_pred_dictOnly',
+#              '/data/nlp/corpora/twitter4food/diabetes/rawTokens/not_pred_dictOnly']
 
+dataset_path=['/code/netsing/toy/risk_pred_dictOnly',
+             '/code/netsing/toy/not_pred_dictOnly']
 
 # In[2]:
 
@@ -185,7 +187,7 @@ print('%i accounts' % (len(y_pos) + len(y_neg)))
 # f = open('risk3dfdictu10t.pkl', 'wb')
 # f = open('risk3dfdictuwo.pkl', 'wb')
 # f = open('risk3dfdictugwo.pkl', 'wb')
-f = open('risk3dfdictupwo.pkl', 'wb')
+f = open('toy.pkl', 'wb')
 
 pkl.dump((x_pos, i_pos, f_pos, y_pos, o_pos), f, -1)
 pkl.dump((x_neg, i_neg, f_neg, y_neg, o_neg), f, -1)
@@ -197,7 +199,7 @@ f.close()
 # f = open('risk3dfdictu10t.dict.pkl', 'wb')
 # f = open('risk3dfdictuwo.dict.pkl', 'wb')
 # f = open('risk3dfdictugwo.dict.pkl', 'wb')
-f = open('risk3dfdictupwo.dict.pkl', 'wb')
+f = open('toy.dict.pkl', 'wb')
 pkl.dump(dictionary, f, -1)
 pkl.dump(features, f, -1)
 f.close()

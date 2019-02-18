@@ -65,7 +65,7 @@ parser.add_argument('--mlp', action='store_true',
                     help='use MLP instead of CNN.')
 parser.add_argument('--wordorder', action='store_true',
                     help='use word order.')
-parser.add_argument('--filebase', default='risk3dfdictugwo',
+parser.add_argument('--filebase', default='risk3dfdictupwo',
                     help='base name of the input files.')
 
 
@@ -256,7 +256,6 @@ def load_data(path=filebase + '.pkl', nb_words=None, skip_top=0,
     np.random.shuffle(f_neg)
     np.random.seed(seed * 2)
     np.random.shuffle(o_neg)
-
 
     # keep maxlen words of each tweet
     if maxlen is not None:
@@ -740,7 +739,6 @@ def new_outs_lengths(input_lenght, kernel_size, padding=0, dilation=1, stride=1)
 #   The Model
 #
 
-
 class MLP(nn.Module):
     def __init__(self, max_features, max_len, embedding_dim, hidden_size, feats=0):
         super(MLP, self).__init__()
@@ -754,7 +752,7 @@ class MLP(nn.Module):
         self.linear = nn.Linear(hidden_size * (1 + feats * 2), 1)
         self.sigmoid = nn.Sigmoid()
         
-    def forward(self, inputs, test_mode=False, domain=[None,None], o=None):
+    def forward(self, inputs, test_mode=False, domain=[None,None], o=None, lrp=None):
         embeds = self.embs(inputs)
         if o is not None:
             embeds = embeds.transpose(1,2).transpose(0,1)
@@ -796,7 +794,22 @@ class MLP(nn.Module):
             out = self.dropout(out)
         out = self.sigmoid(self.linear(out))
 
-        return out
+        if lrp is not None:
+            tinny = 1e-16
+            R = out[0]
+            for i in range(len(outrelus)-1, -1, -1):
+                if i == len(outrelus)-1:
+                    R = torch.mul(torch.div(torch.mul(outrelus[i][0], self.toplinear.weight).transpose(0,1), torch.add(out[0], tinny)), R).sum(1)
+                else:
+                    R = torch.mul(torch.div(torch.mul(outrelus[i][0], self.linear[i+1].weight).transpose(0,1), torch.add(outrelus[i+1][0], tinny)), R).sum(1)
+            R = torch.mul(torch.div(torch.mul(outmean[0], self.linear[0].weight).transpose(0,1), torch.add(outrelus[0][0], tinny)), R).sum(1)
+            if lrp == 0:
+                R = (outemb[0] * R / outemb[0].sum(0)).sum(1)
+            elif lrp == 1:
+                R = (outemb[0] * R / outemb[0].sum(0)).sum(0)
+            return R
+        else:
+            return out
 
 
 class GRU(nn.Module):
